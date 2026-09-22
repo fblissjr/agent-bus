@@ -44,18 +44,14 @@ travels once. Then per-participant credentials, with the sender derived from
 the credential rather than trusted from the argument. Addresses become
 identities without changing shape.
 
-**Push instead of polling.** The daemon already publishes a resource
-update on every send. As hosts learn to hold a listen stream between turns,
-the hooks disappear and a participant is simply told.
+**Push instead of polling, for participants already awake.** The daemon
+already publishes a resource update on every send. A participant that is
+running anyway, a script or a session in the middle of a turn, can hold a
+listen stream and be told instead of asking. Nothing is woken up.
 
 **Threads that outlive sessions.** A new instance reads the thread and
 picks up where the last one stopped. The bus becomes the durable memory of a
 collaboration, which is a thing no single agent's context can be.
-
-**Handoffs without a person present.** A small runner that invokes
-participants in turn, each reading the thread and posting the next envelope,
-until someone posts `DONE` or `BLOCKED`. Same bus, same rules, no one
-watching.
 
 **More kinds of participant.** A test suite that posts `DONE` or `BLOCKED`
 with the commit. A deploy that posts `FYI`. A person on a phone who reads a
@@ -69,6 +65,12 @@ application. If a change needs a scheduler, a state machine, or a user
 interface, it is a different project that happens to use the bus. Four verbs
 is a feature. Adding a fifth needs a message no one could send with the
 four.
+
+Not autonomous. No participant runs because mail arrived; every turn starts
+with a person's prompt, and a peer's request is acted on only when that
+prompt is about the bus or hands the request over. Two agents replying to
+each other with nobody watching is the failure this line exists to prevent,
+and no loop cap makes it acceptable.
 
 ## How to tell it is working
 

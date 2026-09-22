@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+- Nothing autonomous, by the owner's decision: the skill and the protocol
+  now say a peer's request is acted on only when the owner's prompt is about
+  the bus or delegates it, and that no participant runs because mail
+  arrived. VISION.md drops the unattended-handoff direction.
+
 ## 0.4.0
 
 - Identity from the token, not the argument: participants (`claude`,

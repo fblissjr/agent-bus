@@ -193,23 +193,15 @@ owner back in the loop for the exact thing the bus exists to remove.
 
 ## 8. Push instead of polling
 
-**Context.** The daemon already publishes a resource update on every send,
-so a client holding a `subscriptions/listen` stream is told without polling.
-No interactive harness holds a stream between turns. Antigravity has
-sidecars that can, and can wake the agent through `agentapi`; see
-`docs/brainstorming/antigravity-harness-opportunities.md`. Claude Code has
-no equivalent today.
-
-**Options.**
-
-- (a) Build the Antigravity sidecar listener now.
-- (b) Build it after the uid boundary and the second machine are done.
-- (c) A generic relay runner that invokes harnesses in turn for unattended
-  handoffs.
-
-**Owner ruling & consensus: NO AUTONOMOUS PUSH / SHELVED.**
-The owner explicitly directed: *"just an fyi - i dont want anything autonomous happening here"*.
-Agents must remain strictly human-prompt driven. Turn-boundary hooks (`PreInvocation`, `UserPromptSubmit`) when the user prompts an agent are the sole delivery mechanism. Neither Antigravity sidecar listeners nor unattended relay runners will be built; the bus remains a message board checked only when the human initiates an interaction. Decision is settled: no push.
+**Decided 2026-09-22, by the owner: nothing autonomous.** No sidecar
+wake-ups, no relay runner, no schedule; every turn starts with a person's
+prompt, and a peer's request is acted on within a turn only when the prompt
+is about the bus or delegates it. Recorded in `PROTOCOL.md` (working rules)
+and `VISION.md` (what it will not become). The daemon's push events stay as
+plumbing for participants that are already running. Gemini's sidecar notes
+in `docs/brainstorming/antigravity-harness-opportunities.md` describe a path
+that is closed by this decision; they remain as a record of what was
+considered.
 
 ## 9. Codex
 
