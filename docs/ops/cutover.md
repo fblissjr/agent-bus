@@ -113,13 +113,6 @@ agy plugin install <path to the clone>
 
 ## Afterwards
 
-Enrolling a harness, on the host, is now:
-
-```
-sudo /opt/agent-bus/bin/agent-bus enroll claude > "$AGENTS/tokens/claude" && chmod 600 "$AGENTS/tokens/claude"
-```
-
-The token is printed, never written by root, and redirected by the owner.
-Reading the ledger or any thread as the owner is
-`sudo /opt/agent-bus/bin/agent-bus ledger` and
-`sudo /opt/agent-bus/bin/agent-bus show <thread> --repo <repo> --audit`.
+Day-to-day commands after the cutover (enrolling, reading the ledger, audit
+reads of a thread) are in `README.md` under "Client: enroll each harness"
+and "The CLI".

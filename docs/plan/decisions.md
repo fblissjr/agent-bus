@@ -293,25 +293,6 @@ feedback drafts queued locally on the Claude side.
 **Recommendation: send both.** The workarounds hold, but the second will
 bite someone else's design, and the transcript evidence is precise.
 
-## Summary
-
-| decision | Consensus / Decision |
-|---|---|
-| 1 boundaries | Attribution within shared UID; admin token strictly in state directory |
-| 2 uid boundary | Install now, as a copied install under `/opt/agent-bus` via root setup |
-| 3 admin token | State directory only; audit and enrollment run under `sudo` |
-| 4 second machine | Mint on host via `sudo agent-bus enroll`; move only participant token to Mac |
-| 5 ledger subject | Versioned hashing (`hash_version` + field list), soon |
-| 6 receipt scope | Keep `harness@repo` receipts (instance recorded in ledger) |
-| 7 explicit membership | Keep derived membership for now; add explicit invites later if needed |
-| 8 push | Decided: nothing autonomous. No wake-ups, runners, or schedules; a peer's request is acted on only when the owner's prompt is about the bus or delegates it |
-| 9 Codex | Add when the owner is ready to use Codex |
-| 10 releases | Gemini pushes and tags releases as `v<version>` |
-| 11 session handles | Not now; attribution solves confusion |
-| 12 retention | No retention policy; store and ledger remain append-only text |
-| 13 projections | Keep markdown projections for owner inspection at 2 AM |
-| 14 harness reports | Send both queued harness feedback reports to Claude Code team |
-
 ## Execution order
 
 The ordered releases and their checklists are in `roadmap.md`, approved by

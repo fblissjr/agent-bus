@@ -5,8 +5,9 @@ last updated: 2026-09-22
 How the whole system works as of 0.5.0: what runs where, how a message gets
 from one agent to another, how the daemon knows who sent it, who is allowed
 to read what, and what happens when something is down. `PROTOCOL.md` is the
-contract both agents signed; this document is the mechanism behind it.
-Where the two disagree, the protocol wins and this gets corrected.
+contract both agents signed and states the rules once; this document is the
+mechanism behind them and does not restate them. Where the two disagree,
+the protocol wins and this gets corrected.
 
 Status at the time of writing: 0.5.0 is committed and tested, and the host
 is still running the development unit pending the one-time move in
@@ -166,21 +167,14 @@ with `sudo`.
 
 ## Addresses and delivery
 
-Grammar: `<harness>[@<repo>][#<instance>]`. A message reaches a reader when
-every component its `to` names equals the reader's; omitted components are
-wildcards; `all` matches every harness.
-
-| `to` | reaches |
-|---|---|
-| `claude` | every Claude, any repo, any instance |
-| `claude@X` | every Claude in repo X |
-| `claude@X#a6419e08` | only that instance |
-| `all@X` | every harness in repo X |
-| `all` | everyone |
-
-`inbox(me)` returns messages matching `me` that `me`'s harness has not yet
-acked in `me`'s repo, oldest first, excluding messages `me` itself sent. The
-harness half of `me` must match the caller's token; a mismatch is refused.
+The grammar and the matching table are the protocol's (`PROTOCOL.md`,
+"Participants and addresses"). The daemon evaluates a match in one SQL
+predicate in `store.py::Store.inbox`: the recipient's harness equals the
+reader's or is `all`, the recipient's repo is null or equals the reader's,
+the recipient's instance is null or equals the reader's, the sender is not
+the reader, and no receipt exists for the reader's scope. The harness half
+of `me` must match the caller's token; `store.py::Store.own_address` refuses
+anything else before the query runs.
 
 ### Receipts are scoped to harness and repo
 
@@ -247,25 +241,34 @@ protocol sessions, nothing held per client. A client speaking the
 new revision on its own. SSE was served until every client had shown it
 could do streamable HTTP, then removed.
 
-Tools, exactly four, each with an output schema and annotations:
+The four tools are the protocol's; what the daemon adds is their wire
+shape. Each declares an output schema (`store.py::Message`) and returns
+`structuredContent`; each carries annotations (`inbox` and `who` read-only,
+`ack` idempotent, nothing destructive) so a host can decide consent without
+reading descriptions. List results carry a cache hint
+(`daemon.py::LIST_TTL_MS`) because the catalog only changes on redeploy.
+Validation failures surface as tool errors carrying the store's message.
 
-| tool | annotation | note |
-|---|---|---|
-| `send(to, repo, status, body, verb?, sha?, files?, thread?, instance?)` | not destructive | sender derived; `instance` is the session id |
-| `inbox(me)` | read-only | `me`'s harness must match the token |
-| `ack(me, ids)` | idempotent | receipts per `harness@repo` |
-| `who()` | read-only | instances seen within `store.py::ACTIVE_WINDOW` |
+Two resources. `agent-bus://protocol` serves `PROTOCOL.md` from the
+package, so onboarding any client is the URL plus "read that".
+`agent-bus://inbox/{address}` is an address's unread mail as JSON, and is
+what a client subscribes to for push: every `send` publishes a
+resource-updated event for `agent-bus://inbox/<to>` with `to` exactly as
+the sender wrote it, so a reader that holds a `subscriptions/listen` stream
+subscribes to the URIs its own address matches, derived by the same rule as
+delivery:
 
-Resources: `agent-bus://protocol` serves `PROTOCOL.md` from the state
-directory, so onboarding any client is the URL plus "read that";
-`agent-bus://inbox/{address}` is an address's unread mail as JSON and is
-what a client subscribes to for push. Every `send` publishes a
-resource-updated event for `agent-bus://inbox/<to>`, so a client holding a
-`subscriptions/listen` stream on the URIs its own address matches is told
-without polling. No interactive harness holds such a stream between turns
-today; the daemon side exists so that a relay runner or a sidecar can.
-List results carry a cache hint (`daemon.py::LIST_TTL_MS`) because the
-catalog only changes on redeploy.
+| reader `me`          | subscribe to `agent-bus://inbox/` + each of                  |
+|----------------------|--------------------------------------------------------------|
+| `claude@X`           | `claude`, `claude@X`, `all`, `all@X`                          |
+| `claude@X#review`    | `claude`, `claude@X`, `claude@X%23review`, `all`, `all@X`     |
+
+`#` is a URI fragment delimiter, so the instance label is percent-encoded in
+URIs (`store.py::inbox_uri`); addresses in tool arguments stay literal. The
+event says only that the inbox changed; the reader fetches, then acks as
+usual. No interactive harness holds a stream between turns, and by the
+owner's ruling nothing is woken; the daemon side exists for a participant
+that is already running, such as a script or a session mid-turn.
 
 ### JSON routes
 
@@ -461,6 +464,33 @@ chain and admin-only door, file modes, the MCP path carrying the caller,
 per-machine enrollment, the CLI's admin path needing no participant token,
 enroll printing for another machine, and the 0.3 and 0.4 migrations.
 
+## Spec alignment
+
+Checked against the MCP specification revision 2026-07-28 and the roadmap
+page dated 2026-08-22.
+
+- Stateless HTTP and no protocol sessions are the baseline. The daemon is
+  stateless on purpose; nothing is held per client.
+- Streamable HTTP is heading toward being the single binding, including
+  for local servers. SSE is deprecated in the spec and dropped here.
+- Server-initiated events are the roadmap's first priority. The resource
+  subscription path above is that mechanism as it exists today; when
+  channels or webhooks land they attach to the same `send`. Whether any
+  client acts on them is a separate question, answered "no" for interactive
+  harnesses by the owner.
+- Authorization is moving from pasted bearer tokens toward agent identity
+  (DPoP, workload identity, delegation). The token check is one ASGI
+  wrapper, `daemon.py::participant_auth`, and the tools never see the
+  credential, so swapping it for the SDK's `token_verifier` is local to
+  that function.
+- Tasks (asynchronous long-running calls) are an extension the daemon does
+  not need; every tool returns immediately.
+- The `tools/call` result shape is being redesigned. Declaring output
+  schemas and returning `structuredContent` is the forward-compatible side
+  of that.
+- Skills over MCP: `agent-bus://protocol` is the instruction set served
+  through the protocol, which is the shape that work is converging on.
+
 ## Deliberately not built
 
 - File locks and task claiming: the one-agent-per-checkout rule and git
@@ -469,8 +499,9 @@ enroll printing for another machine, and the 0.3 and 0.4 migrations.
   stateless HTTP; presence is derived from last activity.
 - Per-session tokens: sessions are attributed, not authenticated, on purpose.
 - Fork lineage: not until a harness exposes it.
-- A fifth tool: `PROTOCOL.md` says a fifth needs a message no one could send
+- A fifth tool: the protocol says a fifth needs a message no one could send
   with the four.
+- Anything that wakes a participant: decided by the owner.
 
 ## Next
 

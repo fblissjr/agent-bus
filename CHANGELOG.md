@@ -21,6 +21,12 @@
   the development unit to the system unit, with rollback).
 - README host and client sections describe that flow; the skill points at
   the system unit.
+- Documents reorganized: `PROTOCOL.md` is the contract only (what a
+  participant must do) and is about half its former length; the
+  architecture, push mechanism, and spec-direction text moved into
+  `docs/design/system.md`, which no longer restates the protocol's tables;
+  README, the cutover runbook, and the decisions doc each lost a duplicate
+  copy. `AGENTS.md` (imported by `CLAUDE.md`) says how to work in this repo.
 
 ## 0.4.2
 

@@ -206,12 +206,9 @@ Run the tests with `uv run --group dev pytest`.
 
 ## Spec alignment
 
-Built against the MCP specification revision 2026-07-28 and its roadmap:
-stateless HTTP with no protocol sessions, typed tool outputs and
-annotations, cacheable list results, and push via resource subscriptions.
-Auth is one swappable function, ready for the agent-identity work when it
-lands. Details and the reasoning are in the last section of
-[PROTOCOL.md](PROTOCOL.md).
+Built against the MCP specification revision 2026-07-28. What that means
+here, and where the spec is heading, is the "Spec alignment" section of
+[docs/design/system.md](docs/design/system.md).
 
 ## License
 
