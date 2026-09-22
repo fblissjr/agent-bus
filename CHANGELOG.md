@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.1
+
+- `agent-bus register` renders the owner's audit page (every message,
+  receipt, presence row, participant, and ledger row; a timeline against the
+  commits; the tables with filters and resizable columns; the shared
+  vocabulary) from a new admin-only `GET /api/export`. The template is
+  tracked at `src/agent_bus/register.html`; the output goes to the
+  gitignored `internal/register/` and never carries a token hash.
+- Two design notes: `docs/design/identity-hardening.md` (a tiered plan for
+  cross-harness identity on a shared uid) and `docs/design/groups.md`
+  (rooms with explicit membership as row-level read filtering in the
+  daemon). Designs, not decisions.
+- The sudo boundary explained in `docs/design/system.md` and checked at the
+  top of the cutover runbook: what it enforces, what would weaken it, what
+  it does not cover.
+- `.gitignore` is this repo's own and covers every harness's workspace
+  state.
+
 ## 0.5.0
 
 - Lockdown, code only. Participants are keyed by harness and machine, so

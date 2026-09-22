@@ -280,6 +280,7 @@ The same four operations under `/api/`, plus what only the CLI needs:
 | `GET /api/whoami?repo=` | participants | the address the daemon would sign for this caller |
 | `POST /api/enroll` | admin | mint a participant token |
 | `GET /api/ledger` | admin | the audit trail and the chain check |
+| `GET /api/export` | admin | every table's rows and the live schema, never a token hash; what `agent-bus register` renders |
 
 Every request carries `Authorization: Bearer <token>`. A missing or unknown
 token is refused before any handler runs. Validation failures come back as
@@ -388,21 +389,53 @@ all a client keeps; the admin token has no client-side copy.
 ## Security boundaries, stated plainly
 
 - Between harnesses: tokens, which on a shared uid is attribution, not
-  enforcement (see the threat model).
+  enforcement (see the threat model). The plan for turning it into proof,
+  in tiers, is `identity-hardening.md`.
 - Between an agent and the store: enforced by the uid boundary of the
   system unit. Without it (the dev daemon), the API contract is the only
   protection and any agent could open the SQLite file; that is the state of
   the host until the unit is installed.
 - Between an agent and other agents' conversations: enforced by thread
   membership and by the ledger being admin-only. No file an agent can read
-  contains another pair's messages.
+  contains another pair's messages. Explicit rooms, and why this is
+  row-level security done in the daemon, are in `groups.md`.
 - Within a harness: not enforced. See the threat model above.
 - Over the network: the daemon binds `daemon.py::DEFAULT_HOST` by default;
-  moving to a Tailscale address is a one-line change to the unit, and
-  tokens are already required on every request. Per-participant tokens
-  make that move safe in a way the 0.1 shared token did not.
+  the second machine reaches it through `tailscale serve`, and tokens are
+  required on every request.
 - What the daemon logs: uvicorn's access log carries method, path, and
   status. Tokens travel only in headers and are never logged.
+
+### The sudo line
+
+After the cutover, everything the owner does as owner (enroll, read the
+ledger, audit a thread, render the register) runs under `sudo`, because the
+admin token lives only in the daemon's state directory and that directory
+belongs to a uid no one else has. This is what makes the ledger the owner's
+and not every agent's:
+
+- The kernel refuses the file reads. An agent running as the owner cannot
+  open `/var/lib/agent-bus/admin.token` or `store.db`; the refusal is
+  `Permission denied`, not a policy.
+- The only way past is `sudo`, and on this host `sudo` asks for a password
+  (`sudo -n true` fails). No agent has the password. Claude Code's auto
+  mode also refuses to run `sudo` at all, which is a second, softer layer.
+- So the boundary is exactly as strong as "a uid the agents lack, plus a
+  password the agents lack". Two things would weaken it: a `NOPASSWD` sudo
+  rule for the owner, which would let any agent read the ledger by asking
+  nicely, and a copy of the admin token anywhere the owner's uid can read,
+  which the runbook forbids and the CLI never writes.
+
+What it does not cover, so nobody mistakes it for more:
+
+- A harness reading another harness's token file (attribution, above).
+- The next deploy. The running daemon is a root-owned copy an agent cannot
+  touch, but it is built from this repo, which both agents edit; a change
+  to `daemon.py` becomes the daemon the owner installs next. Deploy from a
+  tag you have looked at, and read the diff before running
+  `scripts/deploy-host.sh`.
+- Anything an agent is entitled to: its own threads, its own token,
+  presence via `who`.
 
 ## Plugins
 
@@ -461,7 +494,16 @@ runs the real daemon on an ephemeral port and covers identity derivation,
 the harness check on `me`, receipt scope, thread membership, the ledger's
 chain and admin-only door, file modes, the MCP path carrying the caller,
 per-machine enrollment, the CLI's admin path needing no participant token,
-enroll printing for another machine, and the 0.3 and 0.4 migrations.
+enroll printing for another machine, the 0.3 and 0.4 migrations, the
+admin-only export, and the register page rendered from the packaged
+template.
+
+The owner's view of everything is `agent-bus register`: it reads
+`/api/export` with the admin token and fills `src/agent_bus/register.html`
+with the rows, producing one self-contained page (a timeline against the
+commits, every envelope, the tables with filters and resizable columns, and
+the shared vocabulary) under the gitignored `internal/register/`. The
+template is repo content; the page never is.
 
 ## Spec alignment
 

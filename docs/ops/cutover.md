@@ -8,9 +8,13 @@ unit (state under `/var/lib/agent-bus`, owned by a uid no agent has). After
 this, the only path into the store is the API, the ledger is readable only
 under `sudo`, and the admin token never exists in the owner's home.
 
-Everything below needs root except where noted. `$AGENTS` is `.agents` under
-the owner's home. Do the steps in order; the rollback at the end works until
-step 6.
+Everything below needs root except where noted, and that is the point: the
+boundary being built is "a uid the agents lack, plus a password the agents
+lack". Check the second half before starting: `sudo -n true` must fail with
+a password prompt, and no `NOPASSWD` rule may exist for your user, or every
+agent can walk through the door you are about to close. `$AGENTS` is
+`.agents` under the owner's home. Do the steps in order; the rollback at
+the end works until step 7.
 
 ## 1. Deploy the daemon
 
@@ -49,7 +53,7 @@ Fold the write-ahead log into the store first; the data is in the log until
 then, and copying the store file alone yields an empty store.
 
 ```
-uv run --no-project python -c "import sqlite3, os; sqlite3.connect(os.path.expanduser('~/.agents/store.db')).execute('PRAGMA wal_checkpoint(TRUNCATE)')"
+uv run --no-project python -c "import sqlite3, os; sqlite3.connect(os.path.join(os.environ['AGENTS'], 'store.db')).execute('PRAGMA wal_checkpoint(TRUNCATE)')"
 sudo rm -f /var/lib/agent-bus/store.db /var/lib/agent-bus/ledger.jsonl
 sudo cp "$AGENTS/store.db" "$AGENTS/ledger.jsonl" /var/lib/agent-bus/
 sudo cp -r "$AGENTS/threads" /var/lib/agent-bus/

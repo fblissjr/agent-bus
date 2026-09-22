@@ -324,6 +324,31 @@ def cmd_ledger(args):
         print(f"{r['seq']:>6}  {r['ts']}  {r['event']:<6} {who:<34} {(r.get('subject') or ''):<36} msg={r['message_id'] or '-'}")
 
 
+def git_log():
+    """The checkout's commits, oldest first, for the register's timeline; empty outside a repo."""
+    try:
+        res = subprocess.run(["git", "log", "--reverse", "--date=iso-strict", "--format=%h|%ad|%s"], capture_output=True, text=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+    return [dict(zip(("sha", "ts", "subject"), line.split("|", 2))) for line in res.stdout.splitlines() if line]
+
+
+def cmd_register(args):
+    """Render the owner's audit page: every message, receipt, presence row, participant, and
+    ledger row through the admin export, into a self-contained HTML file. The template ships
+    with the package; the output carries the data and is never repo content."""
+    admin = get_admin_token(admin_state_dir(args.state_dir))
+    data = api_call("/api/export", admin)
+    data["commits"] = git_log()
+    template = Path(__file__).with_name("register.html").read_text()
+    blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+    stamp = data["generated"][:10]
+    out = Path(args.out) if args.out else Path("internal") / "register" / f"{stamp}-register.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(template.replace("__DATA__", blob))
+    print(f"{out}  ({len(data['messages'])} messages, {len(data['ledger'])} ledger rows)")
+
+
 # hooks
 
 def read_hook_stdin():
@@ -445,6 +470,10 @@ def main():
     p_ledger.add_argument("--harness", dest="harness_filter", help="Only this harness's rows")
     p_ledger.add_argument("--json", action="store_true", help="Output JSON")
     p_ledger.set_defaults(func=cmd_ledger)
+
+    p_register = subparsers.add_parser("register", help="Render the owner's audit page from the admin export (admin token only)")
+    p_register.add_argument("--out", help="Where to write the page (default: internal/register/<date>-register.html under the current directory)")
+    p_register.set_defaults(func=cmd_register)
 
     p_hook = subparsers.add_parser("hook", help="Hook handler for agent session start / turn")
     p_hook.add_argument("--agent", required=True, choices=["claude", "antigravity"], help="Target agent")

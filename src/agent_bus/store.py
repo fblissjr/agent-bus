@@ -385,6 +385,29 @@ class Store:
             prev = row["hash"]
         return None
 
+    @locked
+    def export(self):
+        """Everything the owner's register needs, in one admin-only read: the live schema and
+        every row of every table. Token hashes are never included."""
+        def rows(query):
+            cur = self.db.execute(query)
+            names = [c[0] for c in cur.description]
+            return [dict(zip(names, r)) for r in cur.fetchall()]
+        tables = ("messages", "receipts", "seen", "participants", "ledger")
+        schema = {t: [{"name": c[1], "type": c[2], "notnull": bool(c[3]), "pk": bool(c[5])} for c in self.db.execute(f"PRAGMA table_info({t})") if c[1] != "token_hash"] for t in tables}
+        messages = rows("SELECT * FROM messages ORDER BY id")
+        for m in messages:
+            m["files"] = json.loads(m["files"])
+        participant_cols = [c["name"] for c in schema["participants"]]
+        return {
+            "schema": schema,
+            "messages": messages,
+            "receipts": rows("SELECT * FROM receipts ORDER BY ts, message_id"),
+            "seen": rows("SELECT * FROM seen ORDER BY ts"),
+            "participants": rows(f"SELECT {', '.join(participant_cols)} FROM participants ORDER BY ts"),
+            "ledger": rows("SELECT * FROM ledger ORDER BY seq"),
+        }
+
     def project(self, msg):
         path = self.threads_dir / msg["repo"] / f"{msg['thread']}.md"
         path.parent.mkdir(parents=True, exist_ok=True)

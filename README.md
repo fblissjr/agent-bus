@@ -65,7 +65,13 @@ sudo systemctl enable --now "$(pwd)/systemd/agent-bus.service"
 
 State lives in `/var/lib/agent-bus/`: `store.db`, `ledger.jsonl`,
 `threads/`, and `admin.token`. The admin token never leaves that directory:
-enrolling and auditing run under `sudo` and read it there. Re-run the deploy
+enrolling and auditing run under `sudo` and read it there. That `sudo` is
+the whole point, not a chore: every agent on the host runs as you, so the
+only thing between an agent and the ledger is a uid it does not have plus a
+password it does not know. Keep `sudo` asking for a password; a `NOPASSWD`
+rule for your user would hand the ledger back to every agent. The
+"Security boundaries" section of `docs/design/system.md` says exactly what
+this does and does not cover. Re-run the deploy
 script on each release; it restarts the unit. Moving a running development
 daemon to the system unit is `docs/ops/cutover.md`.
 
@@ -172,6 +178,7 @@ agent-bus who                                   # instances active recently
 agent-bus show expander                         # a thread you are part of, (you) marked
 sudo /opt/agent-bus/bin/agent-bus show expander --repo r --audit   # any thread, with the admin token
 sudo /opt/agent-bus/bin/agent-bus ledger                           # the audit trail, admin token only
+sudo /opt/agent-bus/bin/agent-bus register                         # the audit page, into internal/register/
 sudo /opt/agent-bus/bin/agent-bus enroll <harness> [--machine m]   # once per harness per machine
 agent-bus hook --agent claude|antigravity       # what the hooks run
 ```
@@ -179,6 +186,13 @@ agent-bus hook --agent claude|antigravity       # what the hooks run
 The harness is detected from the environment (`CLAUDE_CODE_SESSION_ID`,
 `ANTIGRAVITY_CONVERSATION_ID`, `CODEX_SESSION_ID`, else `owner`) or set with
 `--as`. `--repo` and `--sha` default to the current checkout.
+`register` renders a self-contained HTML page of every message, receipt,
+presence row, participant, and ledger row (a timeline against the commits,
+the envelopes, the tables with filters, and the shared vocabulary) from the
+admin-only export. Its template is tracked at `src/agent_bus/register.html`;
+its output carries the data and goes to the gitignored `internal/register/`
+by default, or wherever `--out` says.
+
 `AGENT_BUS_URL` overrides the daemon URL; `AGENT_BUS_TOKEN_<HARNESS>`
 overrides the token file. The admin path reads `admin.token` from the
 daemon's state directory (`--state-dir`, `AGENT_BUS_STATE_DIR`, else the
@@ -190,6 +204,7 @@ system directory under root and `$AGENTS` for a development daemon).
 src/agent_bus/store.py         schema, identity, ledger, membership, projections
 src/agent_bus/daemon.py        MCP server, /api routes, token-to-participant auth
 src/agent_bus/cli.py           the agent-bus command, also what the hooks run
+src/agent_bus/register.html    the audit page template that `agent-bus register` fills
 systemd/agent-bus.service      the system unit
 scripts/deploy-host.sh         the per-release root step
 docs/ops/cutover.md            moving a live host to the system unit
@@ -197,7 +212,8 @@ docs/ops/cutover.md            moving a live host to the system unit
 plugin.json, hooks.json        Antigravity plugin manifest and lifecycle hooks
 .mcp.json, hooks/, skills/     Claude plugin content
 tests/test_hook.py             brackets the hook against a stub server
-tests/test_daemon.py           the daemon on a real socket: identity, receipts, membership, ledger
+tests/test_daemon.py           the daemon on a real socket: identity, receipts, membership, ledger, export
+docs/design/                   system.md, plus identity-hardening.md and groups.md (designs, not decisions)
 PROTOCOL.md                    the spec
 VISION.md                      where it goes and what it will not become
 ```

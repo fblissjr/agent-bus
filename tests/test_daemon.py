@@ -214,6 +214,33 @@ def test_cli_enroll_for_another_machine_prints_and_writes_nothing(bus, tmp_path)
     assert bus.call("GET", "/api/whoami?repo=r", token)[1]["machine"] == "mac"
 
 
+def test_export_is_admin_only_and_never_carries_token_hashes(bus):
+    claude = bus.enroll("claude")
+    bus.call("POST", "/api/send", claude, {"to": "antigravity@r", "repo": "r", "status": "FYI", "body": "exported", "thread": "t"}, instance="s1")
+    assert bus.call("GET", "/api/export", claude)[0] == 400
+    code, out = bus.call("GET", "/api/export", ADMIN)
+    assert code == 200 and out["first_bad_seq"] is None
+    assert set(out["schema"]) == {"messages", "receipts", "seen", "participants", "ledger"}
+    assert out["messages"][0]["body"] == "exported" and out["messages"][0]["files"] == []
+    assert out["participants"] and "token_hash" not in out["participants"][0]
+    assert "token_hash" not in json.dumps(out)
+    assert [r["event"] for r in out["ledger"]] == ["enroll", "send"]
+
+
+def test_cli_register_renders_the_page_from_the_packaged_template(bus, tmp_path):
+    claude = bus.enroll("claude")
+    bus.call("POST", "/api/send", claude, {"to": "antigravity@r", "repo": "r", "status": "REQUEST", "verb": "review", "body": "on the page", "thread": "t"})
+    r = cli(bus, ["register", "--out", str(tmp_path / "out" / "r.html")], tmp_path)
+    assert r.returncode == 0, r.stderr
+    page = (tmp_path / "out" / "r.html").read_text()
+    assert "__DATA__" not in page and "on the page" in page and "agent-bus Register" in page
+    start = page.index('<script id="data" type="application/json">') + len('<script id="data" type="application/json">')
+    embedded = json.loads(page[start:page.index("</script>", start)].replace("<\\/", "</"))
+    assert len(embedded["messages"]) == 1 and "commits" in embedded
+    assert cli(bus, ["register"], tmp_path).returncode == 0
+    assert list((tmp_path / "internal" / "register").glob("*-register.html"))
+
+
 def test_enrolled_token_destination_rules():
     from agent_bus.cli import TOKENS, enrolled_token_destination
     assert enrolled_token_destination("claude", "here", euid=0, this_host="here") is None

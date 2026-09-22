@@ -1,6 +1,6 @@
 [project]
 name = "agent-bus"
-version = "0.5.0"
+version = "0.5.1"
 description = "Message bus for agents and anything else that follows its protocol: MCP over HTTP, a SQLite store, and a CLI for hooks and humans"
 readme = "README.md"
 license = "MIT"

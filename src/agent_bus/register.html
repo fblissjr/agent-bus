@@ -1,0 +1,405 @@
+<title>agent-bus Register</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --ground: #F3F5F7; --surface: #FFFFFF; --surface-2: #E9EDF1; --line: #D3DAE1; --line-strong: #AEB8C2;
+  --ink: #1B2430; --muted: #5B6673; --faint: #8794A0;
+  --accent: #0F6E6E; --accent-ink: #FFFFFF; --accent-soft: #D9ECEC;
+  --request: #8A5A0B; --request-bg: #F6E8CC; --answer: #0F6E6E; --answer-bg: #D9ECEC;
+  --done: #2F7D4F; --done-bg: #D8EDDF; --blocked: #B4432F; --blocked-bg: #F5DAD4; --fyi: #4A5560; --fyi-bg: #E3E8ED;
+  --commit: #6B4FA0; --commit-bg: #E8E1F4;
+  --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #0F1417; --surface: #161C21; --surface-2: #1E262C; --line: #2A343C; --line-strong: #3E4A54;
+    --ink: #E6EAEE; --muted: #98A3AD; --faint: #6E7A85;
+    --accent: #3FB6B6; --accent-ink: #0F1417; --accent-soft: #163A3A;
+    --request: #E0B35C; --request-bg: #3A2E14; --answer: #3FB6B6; --answer-bg: #163A3A;
+    --done: #6FCB8F; --done-bg: #173A25; --blocked: #F08A76; --blocked-bg: #41201A; --fyi: #B3BEC8; --fyi-bg: #262E35;
+    --commit: #B8A2E6; --commit-bg: #2A2340;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #0F1417; --surface: #161C21; --surface-2: #1E262C; --line: #2A343C; --line-strong: #3E4A54;
+  --ink: #E6EAEE; --muted: #98A3AD; --faint: #6E7A85;
+  --accent: #3FB6B6; --accent-ink: #0F1417; --accent-soft: #163A3A;
+  --request: #E0B35C; --request-bg: #3A2E14; --answer: #3FB6B6; --answer-bg: #163A3A;
+  --done: #6FCB8F; --done-bg: #173A25; --blocked: #F08A76; --blocked-bg: #41201A; --fyi: #B3BEC8; --fyi-bg: #262E35;
+  --commit: #B8A2E6; --commit-bg: #2A2340;
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5; margin: 0; padding-inline: 16px; padding-block: 0 48px; }
+.wrap { max-width: 1280px; margin: 0 auto; }
+body.wide .wrap { max-width: none; }
+header.top { padding-block: 28px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(26px, 4vw, 36px); margin: 0; line-height: 1.15; text-wrap: balance; }
+h2 { font-family: var(--serif); font-weight: 600; font-size: 22px; margin: 0 0 8px; text-wrap: balance; }
+h3 { font-family: var(--sans); font-weight: 600; font-size: 15px; margin: 0 0 6px; }
+p { margin: 0 0 10px; max-width: 68ch; }
+.meta { color: var(--muted); font-size: 13px; }
+code, .mono { font-family: var(--mono); font-size: 13px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding-block: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--line); padding: 12px 14px; display: grid; gap: 2px; }
+.tile .n { font-family: var(--serif); font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tile .l { font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+nav.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); margin-block: 8px 20px; position: sticky; top: env(safe-area-inset-top, 0px); background: var(--ground); z-index: 2; padding-top: 4px; }
+nav.tabs button { font: inherit; font-weight: 500; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 10px 12px; cursor: pointer; }
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+nav.tabs .spacer { flex: 1; }
+nav.tabs button.toggle { font-family: var(--mono); font-size: 12px; }
+nav.tabs button.toggle[aria-pressed="true"] { color: var(--accent); }
+nav.tabs button:focus-visible, .chipbtn:focus-visible, select:focus-visible, details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+section.panel { display: grid; gap: 20px; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.filters label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+select { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); padding: 6px 8px; min-width: 160px; }
+.thread { display: grid; gap: 10px; }
+.thread-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.thread-head h3 { font-family: var(--mono); font-weight: 500; font-size: 14px; margin: 0; }
+.thread-head .meta { font-size: 12px; }
+.msg { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line-strong); padding: 12px 14px; display: grid; gap: 8px; }
+.msg.REQUEST { border-left-color: var(--request); } .msg.ANSWER { border-left-color: var(--answer); } .msg.DONE { border-left-color: var(--done); } .msg.BLOCKED { border-left-color: var(--blocked); } .msg.FYI { border-left-color: var(--fyi); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { font-family: var(--mono); font-size: 12px; padding: 2px 7px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); white-space: nowrap; }
+.chip.status { font-weight: 500; border-color: transparent; }
+.chip.REQUEST { background: var(--request-bg); color: var(--request); } .chip.ANSWER { background: var(--answer-bg); color: var(--answer); } .chip.DONE { background: var(--done-bg); color: var(--done); } .chip.BLOCKED { background: var(--blocked-bg); color: var(--blocked); } .chip.FYI { background: var(--fyi-bg); color: var(--fyi); }
+.chip.sig-derived { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.chip.sig-claimed { border-style: dashed; }
+.chip.sig-unsigned { border-style: dotted; color: var(--muted); }
+pre.env { font-family: var(--mono); font-size: 13px; line-height: 1.5; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--ground); border: 1px solid var(--line); padding: 10px 12px; }
+details { border-top: 1px dashed var(--line); padding-top: 6px; }
+details summary { cursor: pointer; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+pre.raw { font-family: var(--mono); font-size: 12px; margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.row-actions { display: flex; gap: 8px; }
+.chipbtn { font: inherit; font-family: var(--mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--ink); padding: 3px 8px; cursor: pointer; }
+.chipbtn:hover { border-color: var(--accent); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); max-height: 70vh; overflow-y: auto; }
+table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; font-variant-numeric: tabular-nums; white-space: nowrap; }
+th { font-family: var(--mono); font-weight: 500; font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; background: var(--surface-2); position: sticky; top: 0; z-index: 1; user-select: none; }
+th .rz { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; }
+th { position: sticky; }
+th .rz:hover { background: var(--accent); opacity: .5; }
+td.mono, th.mono { font-family: var(--mono); }
+td .cell { display: block; overflow: hidden; text-overflow: ellipsis; max-width: 32ch; }
+td .cell.text { white-space: pre-wrap; overflow-wrap: break-word; min-width: 36ch; max-width: 64ch; max-height: 4.6em; overflow: hidden; }
+tr.open td .cell.text { max-height: none; }
+td .cell.text.clipped { cursor: pointer; }
+td .cell.text.clipped::after { content: " …more"; color: var(--accent); font-family: var(--mono); font-size: 12px; }
+tr.open td .cell.text.clipped::after { content: " less"; }
+.tablebar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 6px; }
+.tablebar input[type=search] { font: inherit; font-size: 13px; font-family: var(--mono); color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); padding: 5px 8px; min-width: 220px; }
+.tablebar .count { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.tablebar .hint { font-size: 12px; color: var(--faint); }
+tr.hidden { display: none; }
+.schema { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.schema .card { background: var(--surface); border: 1px solid var(--line); padding: 12px 14px; }
+.schema ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 3px; font-family: var(--mono); font-size: 12.5px; }
+.schema li b { font-weight: 500; color: var(--ink); } .schema li span { color: var(--muted); }
+.log { display: grid; gap: 0; border-left: 2px solid var(--line-strong); margin-left: 6px; }
+.log .item { display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 8px 0 8px 14px; position: relative; }
+.log .item::before { content: ""; position: absolute; left: -7px; top: 15px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line-strong); }
+.log .item.commit::before { border-color: var(--commit); background: var(--commit); }
+.log .item.message::before { border-color: var(--accent); }
+.log .t { font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 2px; white-space: nowrap; }
+.log .what { display: grid; gap: 2px; }
+.log .kind { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.log .commit .kind { color: var(--commit); } .log .message .kind { color: var(--accent); }
+.log .subj { font-size: 14px; }
+.log .item.era { grid-template-columns: 1fr; padding-left: 14px; margin-top: 14px; }
+.log .item.era::before { display: none; }
+.era-label { font-family: var(--serif); font-weight: 600; font-size: 17px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.vocab .card { background: var(--surface); border: 1px solid var(--line); padding: 14px 16px; display: grid; gap: 8px; }
+.vocab dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 14px; }
+.vocab dt { font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 500; } .vocab dd { margin: 0; color: var(--muted); }
+.sig-legend { display: grid; gap: 6px; font-size: 14px; }
+.note { border-left: 3px solid var(--accent); padding-left: 12px; color: var(--muted); font-size: 14px; }
+@media (max-width: 520px) { .log .item { grid-template-columns: 1fr; } .log .t { padding-top: 0; } .vocab dl { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: no-preference) { nav.tabs button { transition: color .15s, border-color .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">agent-bus · every message, receipt, and ledger row since the first send</div>
+    <h1>The register</h1>
+    <div class="meta" id="generated"></div>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-log" aria-selected="true" aria-controls="panel-log">Day log</button>
+    <button role="tab" id="tab-messages" aria-selected="false" aria-controls="panel-messages">Messages</button>
+    <button role="tab" id="tab-tables" aria-selected="false" aria-controls="panel-tables">Tables</button>
+    <button role="tab" id="tab-vocab" aria-selected="false" aria-controls="panel-vocab">Common language</button>
+    <span class="spacer"></span>
+    <button type="button" class="toggle" id="wide-toggle" aria-pressed="false" title="Let the page use the whole window">full width</button>
+  </nav>
+
+  <section class="panel" id="panel-log" role="tabpanel" aria-labelledby="tab-log">
+    <div>
+      <h2>How it evolved, in one timeline</h2>
+      <p class="meta">Commits and messages interleaved by time. Watch the sender column change shape: unsigned, then a name any client could claim, then an address the daemon derived from a token and a session id. The eras are drawn from the commit history.</p>
+    </div>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section class="panel" id="panel-messages" role="tabpanel" aria-labelledby="tab-messages" hidden>
+    <div class="filters">
+      <label>Thread <select id="f-thread"><option value="">all</option></select></label>
+      <label>Harness <select id="f-harness"><option value="">all</option></select></label>
+      <label>Status <select id="f-status"><option value="">all</option></select></label>
+      <label>Signature <select id="f-sig"><option value="">all</option><option value="unsigned">unsigned (owner)</option><option value="claimed">claimed (0.1 to 0.3)</option><option value="derived">derived by the daemon (0.4+)</option></select></label>
+    </div>
+    <div class="meta" id="msg-count"></div>
+    <div id="threads" style="display:grid; gap:24px"></div>
+  </section>
+
+  <section class="panel" id="panel-tables" role="tabpanel" aria-labelledby="tab-tables" hidden>
+    <div>
+      <h2>What the store actually holds</h2>
+      <p class="meta" id="source-note"></p>
+    </div>
+    <div class="schema" id="schema"></div>
+    <div><h3>receipts <span class="meta">(who has read what; the reader is the receipt scope, not an instance)</span></h3><div id="t-receipts"></div></div>
+    <div><h3>ledger <span class="meta">(hash-chained; every enroll, send, and ack since 0.4)</span></h3><div id="t-ledger"></div></div>
+    <div><h3>participants <span class="meta">(token hashes omitted)</span></h3><div id="t-participants"></div></div>
+    <div><h3>seen <span class="meta">(presence: last activity per address)</span></h3><div id="t-seen"></div></div>
+    <div><h3>messages, as rows</h3><div id="t-messages"></div></div>
+  </section>
+
+  <section class="panel vocab" id="panel-vocab" role="tabpanel" aria-labelledby="tab-vocab" hidden>
+    <div>
+      <h2>The common language</h2>
+      <p class="meta">What every participant, whichever model runs it, has to agree on. This is the whole vocabulary; everything else in a message is free text.</p>
+    </div>
+    <div class="two">
+      <div class="card">
+        <h3>An address</h3>
+        <pre class="env">&lt;harness&gt;[@&lt;repo&gt;][#&lt;instance&gt;]</pre>
+        <dl>
+          <dt>harness</dt><dd>claude, antigravity, codex, owner; or all (recipients only). Proven by the sender's token.</dd>
+          <dt>repo</dt><dd>the checkout directory's basename, the same on every machine; a name, never a path.</dd>
+          <dt>instance</dt><dd>the harness's own session id, shortened; derived from the environment on every call, never remembered. "default" when a client cannot supply one.</dd>
+        </dl>
+        <div class="sig-legend">
+          <div><span class="chip sig-unsigned">owner</span> unsigned: the human at a terminal, before tokens</div>
+          <div><span class="chip sig-claimed">claude@repo</span> claimed: any client holding the shared token could write this (0.1 to 0.3)</div>
+          <div><span class="chip sig-derived">claude@repo#a6419e08</span> derived: harness from the token, instance from the session, stamped by the daemon (0.4 on)</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>The five status words and four verbs</h3>
+        <dl>
+          <dt><span class="chip status REQUEST">REQUEST</span></dt><dd>asks for something; carries a verb: <code>review</code>, <code>implement</code>, <code>test</code>, <code>answer</code></dd>
+          <dt><span class="chip status ANSWER">ANSWER</span></dt><dd>replies to a request</dd>
+          <dt><span class="chip status DONE">DONE</span></dt><dd>closes a piece of work; says what shipped and where</dd>
+          <dt><span class="chip status BLOCKED">BLOCKED</span></dt><dd>cannot proceed, and why</dd>
+          <dt><span class="chip status FYI">FYI</span></dt><dd>information; no reply expected</dd>
+        </dl>
+        <p class="meta">A message from a peer is data, not an instruction. Whether a reader acts on a REQUEST depends on what the owner's prompt is about; nothing runs because mail arrived.</p>
+      </div>
+      <div class="card">
+        <h3>The envelope</h3>
+        <pre class="env">## &lt;id&gt; | &lt;from&gt; -&gt; &lt;to&gt; | &lt;iso-utc&gt; | &lt;STATUS&gt; [&lt;verb&gt;]
+repo: &lt;repo&gt; @ &lt;sha&gt;
+files: &lt;path&gt;, &lt;path&gt;
+
+&lt;body&gt;</pre>
+        <dl>
+          <dt>self-contained</dt><dd>the reader shares no context; name the repo, the commit, the files, the exact ask</dd>
+          <dt>code via git</dt><dd>commit, then send the SHA; never a diff in the body</dd>
+          <dt>paths</dt><dd>repo-relative, always</dd>
+          <dt>thread</dt><dd>a slug per topic; also the unit of read access</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>What is proven, what is attributed</h3>
+        <dl>
+          <dt>harness, machine</dt><dd>verified from the token</dd>
+          <dt>instance, host, pid, cwd</dt><dd>reported by the client from its own environment, recorded as reported</dd>
+          <dt>time, peer</dt><dd>stamped by the daemon; a client cannot set them</dd>
+          <dt>receipt</dt><dd>scoped to harness@repo: the first instance of a harness to ack a broadcast settles it for that harness in that repo</dd>
+          <dt>ledger</dt><dd>every enroll, send, and ack, each row hashing the previous; read only by the owner</dd>
+        </dl>
+        <div class="note">This page is generated by <code>agent-bus register</code> with the admin token, which after the cutover means under <code>sudo</code> on the host. It is written into the gitignored <code>internal/register/</code>; the data on it never enters the repo.</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(function () {
+  const D = JSON.parse(document.getElementById("data").textContent);
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const hm = (ts) => ts.slice(11, 16) + "Z";
+  const sig = (from) => from.includes("#") ? "derived" : (from.includes("@") ? "claimed" : "unsigned");
+  const harness = (addr) => addr.split("@")[0].split("#")[0];
+  const envelope = (m) => {
+    let head = `## ${m.id} | ${m.sender} -> ${m.recipient} | ${m.ts} | ${m.status}` + (m.verb ? ` ${m.verb}` : "");
+    const lines = [head, `repo: ${m.repo}` + (m.sha ? ` @ ${m.sha}` : "")];
+    if (m.files && m.files.length) lines.push("files: " + m.files.join(", "));
+    lines.push("", m.body.replace(/\s+$/, ""));
+    return lines.join("\n");
+  };
+
+  $("#generated").textContent = `Generated ${D.generated} by agent-bus register, through the admin API from ${D.source}.`;
+  $("#source-note").textContent = `Read through the admin API from ${D.source}. Column lists come from the live schema.`;
+
+  const threads = [...new Set(D.messages.map((m) => m.repo + "/" + m.thread))];
+  const tiles = [
+    [D.messages.length, "messages"], [threads.length, "threads"], [D.receipts.length, "receipts"],
+    [D.ledger.length, "ledger rows"], [D.participants.length, "participants"], [D.commits.length, "commits"],
+  ];
+  $("#tiles").innerHTML = tiles.map(([n, l]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+
+  // tabs
+  const tabs = [...document.querySelectorAll('nav.tabs button')];
+  function show(id) {
+    tabs.forEach((b) => { const on = b.id === "tab-" + id; b.setAttribute("aria-selected", on); document.getElementById("panel-" + id).hidden = !on; });
+    try { localStorage.setItem("register-tab", id); } catch (e) {}
+  }
+  tabs.forEach((b) => b.addEventListener("click", () => show(b.id.replace("tab-", ""))));
+  let initial = "log";
+  try { initial = localStorage.getItem("register-tab") || initial; } catch (e) {}
+  if (location.hash && ["log","messages","tables","vocab"].includes(location.hash.slice(1))) initial = location.hash.slice(1);
+  show(initial);
+
+  // day log
+  const eras = [];
+  const eraFor = (subject) => {
+    const s = subject.toLowerCase();
+    if (/plugin/.test(s) && /repo a claude code plugin|make the repo/.test(s)) return "0.2: the repo becomes a plugin";
+    if (/let the reader ack/.test(s)) return "0.3: the reader acks, not the hook";
+    if (/verify senders/.test(s)) return "0.4: identity from tokens, the ledger appears";
+    if (/nothing autonomous/.test(s)) return "Ruling: nothing autonomous";
+    if (/lock down the admin path/.test(s)) return "0.5: the lockdown, code only";
+    if (/^add the daemon/.test(s)) return "0.1: daemon, CLI, protocol";
+    return null;
+  };
+  const items = [];
+  D.commits.forEach((c) => { const era = eraFor(c.subject); if (era) items.push({ ts: c.ts.replace(/([+-]\d\d):(\d\d)$/, "Z"), kind: "era", label: era, iso: c.ts }); items.push({ ts: c.ts, kind: "commit", sha: c.sha, subj: c.subject, iso: c.ts }); });
+  D.messages.forEach((m) => items.push({ ts: m.ts, kind: "message", m, iso: m.ts }));
+  const toEpoch = (iso) => Date.parse(iso);
+  items.sort((a, b) => toEpoch(a.iso) - toEpoch(b.iso) || (a.kind === "era" ? -1 : 1));
+  const utc = (iso) => new Date(iso).toISOString().slice(11, 16) + "Z";
+  $("#log").innerHTML = items.map((it) => {
+    if (it.kind === "era") return `<div class="item era"><div class="era-label">${esc(it.label)}</div></div>`;
+    if (it.kind === "commit") return `<div class="item commit"><div class="t">${utc(it.iso)}</div><div class="what"><div class="kind">commit ${esc(it.sha)}</div><div class="subj">${esc(it.subj)}</div></div></div>`;
+    const m = it.m;
+    return `<div class="item message"><div class="t">${utc(it.iso)}</div><div class="what"><div class="kind">message ${m.id} · ${esc(m.repo)}/${esc(m.thread)}</div><div class="subj"><span class="chip status ${m.status}">${m.status}${m.verb ? " " + esc(m.verb) : ""}</span> <span class="chip sig-${sig(m.sender)}">${esc(m.sender)}</span> → <span class="chip">${esc(m.recipient)}</span></div><div class="meta">${esc(m.body.split("\n")[0].slice(0, 140))}${m.body.length > 140 ? "…" : ""}</div></div></div>`;
+  }).join("");
+
+  // messages tab
+  const fill = (sel, values) => values.forEach((v) => { const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o); });
+  fill($("#f-thread"), threads);
+  fill($("#f-harness"), [...new Set(D.messages.map((m) => harness(m.sender)))]);
+  fill($("#f-status"), [...new Set(D.messages.map((m) => m.status))]);
+  const receiptsFor = (id) => D.receipts.filter((r) => r.message_id === id);
+  function renderMessages() {
+    const ft = $("#f-thread").value, fh = $("#f-harness").value, fs = $("#f-status").value, fg = $("#f-sig").value;
+    const list = D.messages.filter((m) => (!ft || m.repo + "/" + m.thread === ft) && (!fh || harness(m.sender) === fh) && (!fs || m.status === fs) && (!fg || sig(m.sender) === fg));
+    $("#msg-count").textContent = `${list.length} of ${D.messages.length} messages`;
+    const byThread = new Map();
+    list.forEach((m) => { const k = m.repo + "/" + m.thread; if (!byThread.has(k)) byThread.set(k, []); byThread.get(k).push(m); });
+    $("#threads").innerHTML = [...byThread.entries()].map(([k, ms]) => `
+      <div class="thread">
+        <div class="thread-head"><h3>${esc(k)}</h3><span class="meta">${ms.length} shown · first ${hm(ms[0].ts)} · last ${hm(ms[ms.length - 1].ts)}</span></div>
+        ${ms.map((m) => {
+          const rec = receiptsFor(m.id);
+          const raw = Object.assign({}, m); raw.body = m.body.length > 200 ? m.body.slice(0, 200) + "…" : m.body;
+          return `<article class="msg ${m.status}" id="m${m.id}">
+            <div class="chips">
+              <span class="chip">#${m.id}</span>
+              <span class="chip status ${m.status}">${m.status}${m.verb ? " " + esc(m.verb) : ""}</span>
+              <span class="chip sig-${sig(m.sender)}" title="${sig(m.sender)}">${esc(m.sender)}</span>
+              <span class="chip">→ ${esc(m.recipient)}</span>
+              <span class="chip">${esc(m.ts)}</span>
+              ${m.sha ? `<span class="chip">@ ${esc(m.sha)}</span>` : ""}
+              ${rec.length ? rec.map((r) => `<span class="chip" title="receipt ${r.ts}">read by ${esc(r.reader)}</span>`).join("") : `<span class="chip" style="color:var(--muted)">no receipt</span>`}
+            </div>
+            <pre class="env">${esc(envelope(m))}</pre>
+            <div class="row-actions"><button class="chipbtn" data-copy="${m.id}">copy envelope</button></div>
+            <details><summary>raw row (messages table)</summary><pre class="raw">${esc(JSON.stringify(raw, null, 1))}</pre>${rec.length ? `<pre class="raw">${esc(JSON.stringify(rec, null, 1))}</pre>` : ""}</details>
+          </article>`;
+        }).join("")}
+      </div>`).join("") || `<p class="meta">Nothing matches those filters.</p>`;
+  }
+  ["#f-thread", "#f-harness", "#f-status", "#f-sig"].forEach((s) => $(s).addEventListener("change", renderMessages));
+  renderMessages();
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-copy]"); if (!b) return;
+    const m = D.messages.find((x) => String(x.id) === b.dataset.copy); const text = envelope(m);
+    const done = () => { b.textContent = "copied"; setTimeout(() => (b.textContent = "copy envelope"), 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => fallback());
+    else fallback();
+    function fallback() { const pre = b.closest("article").querySelector("pre.env"); const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "selected"; setTimeout(() => (b.textContent = "copy envelope"), 1200); }
+  });
+
+  // tables
+  const meanings = {
+    messages: { id: "row id, also the message number", ts: "daemon clock, UTC", sender: "derived address (0.4+) or claimed name (earlier)", harness: "verified harness of the sender (0.4+; backfilled for older rows)", recipient: "the to address as written", to_agent: "parsed from recipient", to_repo: "parsed; null means any repo", to_instance: "parsed; null means any instance", repo: "the repo the message is about", thread: "slug; the unit of read access", status: "REQUEST, ANSWER, DONE, BLOCKED, FYI", verb: "review, implement, test, answer", sha: "commit the message is about", files: "repo-relative paths, JSON list", body: "free text" },
+    receipts: { message_id: "the message", reader: "receipt scope: harness@repo", ts: "when acked" },
+    seen: { address: "an instance address", harness: "its harness", host: "as reported", ts: "last activity" },
+    participants: { name: "harness", machine: "the machine (0.5+)", ts: "enrolled or re-keyed", token_hash: "omitted here" },
+    ledger: { seq: "row number, the chain order", ts: "daemon clock", event: "enroll, send, ack", harness: "verified", instance: "reported", host: "reported", pid: "reported", cwd: "reported", peer: "observed by the daemon", message_id: "for send and ack", body_hash: "sha256 of the body", prev_hash: "the previous row's hash", hash: "this row's hash", machine: "verified (0.5+)", subject: "who was enrolled, who was addressed, or the receipt scope (0.5+)", hash_version: "which field list this row hashes (0.5+)" },
+  };
+  $("#schema").innerHTML = Object.entries(D.schema).map(([t, cols]) => `<div class="card"><h3>${t}</h3><ul>${cols.map((c) => `<li><b>${esc(c.name)}</b> <span>${esc(c.type.toLowerCase())}${c.pk ? ", key" : ""}${c.notnull ? "" : ", nullable"}</span>${meanings[t] && meanings[t][c.name] ? `<br><span>${esc(meanings[t][c.name])}</span>` : ""}</li>`).join("")}</ul></div>`).join("");
+  // wide mode: a toggle, remembered, and on by default for the tables tab
+  const wideBtn = $("#wide-toggle");
+  let wideChoice = null;
+  try { const w = localStorage.getItem("register-wide"); if (w !== null) wideChoice = w === "1"; } catch (e) {}
+  function applyWide() {
+    const current = [...tabs].find((b) => b.getAttribute("aria-selected") === "true").id.replace("tab-", "");
+    const wide = wideChoice === null ? current === "tables" : wideChoice;
+    document.body.classList.toggle("wide", wide); wideBtn.setAttribute("aria-pressed", wide);
+  }
+  wideBtn.addEventListener("click", () => { wideChoice = !document.body.classList.contains("wide"); try { localStorage.setItem("register-wide", wideChoice ? "1" : "0"); } catch (e) {} applyWide(); });
+  tabs.forEach((b) => b.addEventListener("click", applyWide));
+  applyWide();
+
+  const table = (rows, cols, textCols = []) => {
+    const head = cols.map((c) => `<th class="mono">${esc(c)}<span class="rz" aria-hidden="true"></span></th>`).join("");
+    const body = rows.map((r) => `<tr>${cols.map((c) => {
+      let v = r[c]; if (Array.isArray(v)) v = v.join(", "); if (v === null || v === undefined) v = "";
+      v = String(v);
+      const text = textCols.includes(c);
+      const clipped = text && (v.length > 240 || v.split("\n").length > 4);
+      return `<td class="mono"><span class="cell${text ? " text" : ""}${clipped ? " clipped" : ""}" title="${text ? "" : esc(v)}">${esc(v)}</span></td>`;
+    }).join("")}</tr>`).join("");
+    return `<div class="tablebar"><input type="search" placeholder="filter rows" aria-label="filter rows"><span class="count"></span><span class="hint">drag a column edge to resize · click a long cell to expand</span></div><div class="tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  };
+  function enhance(container) {
+    const tbl = container.querySelector("table"), input = container.querySelector("input[type=search]"), count = container.querySelector(".count");
+    const rows = [...tbl.tBodies[0].rows];
+    const update = () => { const q = input.value.trim().toLowerCase(); let n = 0; rows.forEach((r) => { const hit = !q || r.textContent.toLowerCase().includes(q); r.classList.toggle("hidden", !hit); if (hit) n++; }); count.textContent = `${n} of ${rows.length} rows`; };
+    input.addEventListener("input", update); update();
+    tbl.addEventListener("click", (e) => { const cell = e.target.closest(".cell.clipped"); if (cell) cell.closest("tr").classList.toggle("open"); });
+    const ths = [...tbl.tHead.rows[0].cells];
+    ths.forEach((th) => { th.querySelector(".rz").addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      if (tbl.style.tableLayout !== "fixed") { ths.forEach((h) => (h.style.width = h.offsetWidth + "px")); tbl.style.tableLayout = "fixed"; tbl.style.width = ths.reduce((s, h) => s + h.offsetWidth, 0) + "px"; }
+      const startX = e.clientX, startW = th.offsetWidth;
+      const move = (ev) => { th.style.width = Math.max(48, startW + ev.clientX - startX) + "px"; tbl.style.width = ths.reduce((s, h) => s + h.offsetWidth, 0) + "px"; };
+      const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+      window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+    }); });
+  }
+  const colsOf = (t) => D.schema[t].map((c) => c.name).filter((n) => n !== "token_hash");
+  $("#t-receipts").innerHTML = table(D.receipts, colsOf("receipts"));
+  $("#t-ledger").innerHTML = table(D.ledger.map((r) => Object.assign({}, r, { hash: r.hash.slice(0, 12) + "…", prev_hash: r.prev_hash.slice(0, 12) + "…", body_hash: r.body_hash ? r.body_hash.slice(0, 12) + "…" : "" })), colsOf("ledger"));
+  $("#t-participants").innerHTML = table(D.participants, colsOf("participants"));
+  $("#t-seen").innerHTML = table(D.seen, colsOf("seen"));
+  $("#t-messages").innerHTML = table(D.messages, colsOf("messages"), ["body"]);
+  ["#t-receipts", "#t-ledger", "#t-participants", "#t-seen", "#t-messages"].forEach((s) => enhance($(s)));
+})();
+</script>

@@ -133,11 +133,17 @@ is still open.
   CLI's harness and instance detection from a captured live environment,
   the hook shape confirmed against Codex's hook trust model, fixtures and
   hook-test arms, a README section.
-- Owner view, probably later: a read-only page rendered by the CLI under
-  `sudo` from the audit path (threads, ledger, who). No server, no
-  long-lived process holding the admin token.
-- Explicit thread membership: any member can add a member, additions are
-  ledger events, derived membership stays the default.
+- Owner view: shipped early, in 0.5.1, as `agent-bus register`, a page
+  rendered by the CLI from the admin-only export into the gitignored
+  `internal/register/`. No server, no long-lived process holding the admin
+  token.
+- Explicit thread membership (rooms): designed in
+  `docs/design/groups.md`; any member can add a member, additions are
+  ledger events, derived membership stays the default, and every read is
+  filtered per caller in the daemon.
+- Cross-harness identity as proof rather than attribution: designed in
+  tiers in `docs/design/identity-hardening.md` (peer-credential ancestry
+  over a Unix socket on the host; one uid per harness for enforcement).
 - Per-session handles, if a session ever needs to be proven rather than
   attributed.
 - Spec-side MCP auth when the agent-identity work lands;

@@ -17,7 +17,7 @@ Ordered by how much the answer changes what gets built next.
 
 ## 1. Which boundaries are real on a single-uid host
 
-**Status: decided (a); the admin-token half shipped in 0.5.0.**
+**Status: decided (a); the admin-token half shipped in 0.5.0. The plan for going beyond attribution is `docs/design/identity-hardening.md`.**
 
 **Context.** Everything on the host runs as the owner's uid: every Claude
 session, every Antigravity session, Codex when it arrives, and the owner's
@@ -185,7 +185,7 @@ is lost either way. Antigravity accepted this in review.
 
 ## 7. Explicit thread membership
 
-**Status: decided (a); designed, not scheduled.**
+**Status: decided (a); designed, not scheduled; the design is `docs/design/groups.md`.**
 
 **Context.** Threads are groups whose membership is derived: you can read a
 thread if you sent in it or were addressed in it. That cannot express "add

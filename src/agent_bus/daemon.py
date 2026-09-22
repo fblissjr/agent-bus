@@ -31,7 +31,7 @@ from mcp.types import ToolAnnotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from agent_bus.store import DEFAULT_STATE_DIR, Identity, Message, Reader, Store, inbox_uri
+from agent_bus.store import DEFAULT_STATE_DIR, Identity, Message, Reader, Store, inbox_uri, now
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -225,6 +225,13 @@ def build_server(store):
             raise ValueError("the ledger is read with the admin token only")
         q = request.query_params
         return {"first_bad_seq": store.verify_ledger(), "rows": store.ledger(limit=q.get("limit", 200), harness=q.get("harness"))}
+
+    @server.custom_route("/api/export", methods=["GET"])
+    @api
+    async def api_export(request):
+        if caller.get().harness != ADMIN:
+            raise ValueError("the export is read with the admin token only")
+        return {"generated": now(), "source": str(store.state_dir), "first_bad_seq": store.verify_ledger(), **store.export()}
 
     return server
 
