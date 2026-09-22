@@ -286,12 +286,7 @@ bite someone else's design, and the transcript evidence is precise.
 | 13 projections | Keep markdown projections for owner inspection at 2 AM |
 | 14 harness reports | Send both queued harness feedback reports to Claude Code team |
 
-## Agreed execution order
+## Execution order
 
-1. **Admin token lockdown** (decisions 1 & 3): Keep in state directory; CLI reads it under `sudo`. Update README.
-2. **UID boundary host install** (decision 2): Copied install under `/opt/agent-bus` with `DynamicUser=yes`.
-3. **Versioned ledger hashing with `subject`** (decision 5): Clean, extensible ledger fields.
-4. **Tag and push** (decision 10): Antigravity pushes and tags.
-5. **Mac enrollment** (decision 4): Mint participant token on host and copy to Mac.
-6. **Codex integration** (decision 9): Onboard when owner is ready.
-*(Nothing autonomous, per decision 8; this is decided, not deferred.)*
+The ordered releases and their checklists are in `roadmap.md`, approved by
+the owner on 2026-09-22.
