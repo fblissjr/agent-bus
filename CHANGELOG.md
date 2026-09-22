@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.1
+## 0.4.2
 
 - Nothing autonomous, by the owner's decision: the skill and the protocol
   now say a peer's request is acted on only when the owner's prompt is about
