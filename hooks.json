@@ -1,0 +1,11 @@
+{
+  "agent-bus": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "uv run --no-project ./src/agent_bus/cli.py hook --agent antigravity",
+        "timeout": 10
+      }
+    ]
+  }
+}

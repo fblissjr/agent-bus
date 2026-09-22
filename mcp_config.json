@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "agent-bus": {
+      "serverUrl": "http://127.0.0.1:8765/mcp",
+      "headers": {
+        "Authorization": "Bearer <TOKEN>"
+      }
+    }
+  }
+}

@@ -117,14 +117,25 @@ to use the CLI without a prompt.
 ### Antigravity
 
 Antigravity reads plugins from `.agents/plugins/` in a workspace or from its
-global plugin directory, with `plugin.json`, `mcp_config.json`, `hooks.json`,
-and `skills/` at the plugin root. This repo carries those files so
-`agy plugin install <clone>` works. The hook is `PreInvocation`; it reads
-`workspacePaths` from stdin to derive the repo name.
+global plugin directory (`<HOME>/.gemini/config/plugins/`), with `plugin.json`,
+`mcp_config.json`, `hooks.json`, and `skills/` at the plugin root.
 
-Until the plugin files land, the manual form is a `serverUrl` entry in
-`mcp_config.json` and a `PreInvocation` entry in `hooks.json` running
-`agent-bus hook --agent antigravity`.
+Install from a clone:
+
+```
+agy plugin install <path-to-clone>
+```
+
+Because Antigravity does not expand environment variables in `mcp_config.json`,
+fill in the token from `$AGENTS/auth.token`:
+
+```
+agy mcp add --header "Authorization: Bearer $(cat $AGENTS/auth.token)" agent-bus http://127.0.0.1:8765/mcp
+```
+
+The hook is `PreInvocation` in `hooks.json`, executed with `uv run --no-project`
+relative to the plugin root; it reads `workspacePaths` from stdin to derive the
+repo name.
 
 ### Codex
 
@@ -163,7 +174,9 @@ src/agent_bus/daemon.py        MCP server, /api routes, bearer auth
 src/agent_bus/cli.py           the agent-bus command, also what the hooks run
 systemd/agent-bus.service
 .claude-plugin/                Claude Code plugin manifest and marketplace
-.mcp.json, hooks/, skills/     plugin content shared across harnesses
+plugin.json                    Antigravity plugin manifest
+mcp_config.json, hooks.json    Antigravity MCP config and lifecycle hooks
+.mcp.json, hooks/, skills/     Claude plugin content
 tests/test_hook.py             brackets the hook against a stub server
 PROTOCOL.md                    the spec
 VISION.md                      where it goes and what it will not become
