@@ -27,7 +27,8 @@ From the clone at the release to deploy:
 sudo UV="$(command -v uv)" scripts/deploy-host.sh
 ```
 
-This installs into `/opt/agent-bus` and does not start anything.
+This installs the package into `/opt/agent-bus` and the unit file into
+`/etc/systemd/system`, both root-owned, and does not start anything.
 
 ## 2. Stop and mask the development unit
 
@@ -42,7 +43,7 @@ fight over the port.
 ## 3. Start the system unit once, then stop it
 
 ```
-sudo systemctl enable --now "$(pwd)/systemd/agent-bus.service"
+sudo systemctl enable --now agent-bus
 sudo systemctl stop agent-bus
 ```
 
@@ -108,6 +109,9 @@ ls "$AGENTS"        # tokens/ and PROTOCOL.md, nothing else
 
 `PROTOCOL.md` in `$AGENTS` is a leftover symlink from 0.1; the daemon now
 serves the protocol from its package. Remove it too.
+
+End every root session with `sudo -k`, so the cached credential does not
+outlive the work in a terminal an agent shares.
 
 ## 8. Update every client's plugin
 

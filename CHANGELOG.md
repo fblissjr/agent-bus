@@ -20,6 +20,11 @@
 - The cutover runbook and the design doc's sudo section check the owner's
   group membership beside the sudo prompt; README describes matching by
   component and the per-harness ack rule.
+- The system unit is installed by `scripts/deploy-host.sh` as a root-owned
+  copy under `/etc/systemd/system`, never enabled by a path into a
+  checkout, and confines the daemon with systemd's sandboxing directives
+  and an owner-only umask. The runbook ends each root session with
+  `sudo -k`.
 
 ## 0.5.2
 

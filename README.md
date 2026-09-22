@@ -60,11 +60,12 @@ this repo as a plugin in each harness. Everything needs `uv`.
 The daemon runs as a systemd system service under its own dynamic uid, so no
 agent on the host (they all run as you) can reach its store except through
 the API. The package is copied under `/opt/agent-bus`, where that uid can
-run it without reading into anyone's home:
+run it without reading into anyone's home, and the unit file is copied
+under `/etc/systemd/system`, so nothing root runs lives in a checkout:
 
 ```
 sudo UV="$(command -v uv)" scripts/deploy-host.sh
-sudo systemctl enable --now "$(pwd)/systemd/agent-bus.service"
+sudo systemctl enable --now agent-bus
 ```
 
 State lives in `/var/lib/agent-bus/`: `store.db`, `ledger.jsonl`,

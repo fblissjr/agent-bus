@@ -439,10 +439,11 @@ and not every agent's:
 What it does not cover, so nobody mistakes it for more:
 
 - A harness reading another harness's token file (attribution, above).
-- The next deploy. The running daemon is a root-owned copy an agent cannot
-  touch, but it is built from this repo, which both agents edit; a change
-  to `daemon.py` becomes the daemon the owner installs next. Deploy from a
-  tag you have looked at, and read the diff before running
+- The next deploy. The running daemon and its unit file are root-owned
+  copies an agent cannot touch, but both are built from this repo, which
+  both agents edit; a change to `daemon.py` or to
+  `systemd/agent-bus.service` becomes what the owner installs next. Deploy
+  from a tag you have looked at, and read the diff before running
   `scripts/deploy-host.sh`.
 - Anything an agent is entitled to: its own threads, its own token,
   presence via `who`.
@@ -485,8 +486,11 @@ and `CHANGELOG.md`.
 
 Host install needs root once for the uid boundary: `scripts/deploy-host.sh`
 copies the package under `/opt/agent-bus` (its Python and uv's cache too,
-since the dynamic uid cannot read into anyone's home), then the system unit
-is enabled. Each release is the same script again; it restarts the unit.
+since the dynamic uid cannot read into anyone's home) and the unit file
+under `/etc/systemd/system`, then the system unit is enabled. The unit
+confines the daemon to the package, its state directory, and IP sockets:
+no home directories, devices, kernel tunables, capabilities, or privilege
+escalation, and a umask that makes every file it creates owner-only. Each release is the same script again; it restarts the unit.
 Enrolling is `sudo /opt/agent-bus/bin/agent-bus enroll <harness>` on the
 host with the printed token placed by the owner; `AGENT_BUS_TOKEN_CLAUDE`
 goes in the shell that starts Claude; each harness installs the plugin. The
