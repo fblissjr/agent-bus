@@ -13,63 +13,23 @@ owner-facing view is probably wanted later, so it is designed but not
 scheduled; and 1.0 means the host is locked down and one Mac harness has
 completed a round trip. Nothing is autonomous, by the owner's ruling.
 
-## 0.5.0 lockdown, code only
+## 0.5.x lockdown, code only: shipped
 
-Everything the uid boundary needs, shippable and tested before anything on
-the host moves. A critic pass found that the naive version breaks in places
-the hooks' by-design silence would hide; each of those is a line below.
+0.5.0 shipped everything the uid boundary needs without touching the host:
+participants keyed by harness and machine (`enroll --machine`); ledger v2
+with `subject`, `machine`, and a `hash_version` inside its own hashed
+fields, old rows still verifying; the admin path resolving its own state
+directory and never writing under root; `PROTOCOL.md` served from the
+package; owner-only store and directory modes; `scripts/deploy-host.sh`
+and `docs/ops/cutover.md`. A critic pass found five ways the naive version
+would have failed silently; all are in the design doc's operations section.
 
-CLI (`src/agent_bus/cli.py`):
+0.5.1 added `agent-bus register` over an admin-only `GET /api/export`, the
+sudo explanation, and the identity-hardening and rooms designs. 0.5.2 made
+`(you)` match on harness and session id rather than on the checkout.
 
-- The admin path resolves its state directory itself: `--state-dir` or
-  `AGENT_BUS_STATE_DIR`, defaulting to the system state directory when run
-  as root and to `$AGENTS` otherwise. `$STATE_DIRECTORY` exists only inside
-  the service, never under `sudo`.
-- `enroll` run as root prints the token and writes nothing; the owner
-  redirects it into `$AGENTS/tokens/<name>` as themselves. Written under
-  root it would land in root's home after the store had already revoked the
-  owner's working token, and every hook would go silent.
-- An unreadable token file is silence in the hook, not a traceback. The
-  participant token is resolved lazily so `show --audit` never needs one.
-- `ledger` prints the new `subject` column.
-
-Store (`src/agent_bus/store.py`):
-
-- Participants are keyed by name and machine, so enrolling the Mac's Claude
-  does not revoke this machine's. `verify` still returns the harness; the
-  machine label lands on the ledger row. Existing rows migrate with this
-  host's name.
-- Ledger v2: `subject` and `hash_version` columns, with the version inside
-  the hashed fields so it cannot be forged; verification picks the field
-  list per row so pre-0.5 rows keep verifying. Rows are never rewritten.
-- The store file and the state directory are owner-only from creation, and
-  the file-mode test covers both.
-
-Daemon (`src/agent_bus/daemon.py`):
-
-- `PROTOCOL.md` is served from package data, so the dynamic uid needs no
-  copy and no symlink into the owner's home; the state-directory copy is a
-  fallback only.
-- A foreground daemon that falls back to `$AGENTS` says so loudly, so a
-  hand-run daemon after cutover cannot silently recreate a store.
-
-Also: the skill's `systemctl --user` becomes `systemctl` (plugin content,
-so the version cascades); `scripts/deploy-host.sh` is the per-release root
-step (copied `uv tool install` from the tag into `/opt/agent-bus`, with
-uv's tool, bin, and python directories all under `/opt/agent-bus`, then a
-service restart); `docs/ops/cutover.md` is the one-time runbook below with
-a one-line rollback; README host and client sections say what the runbook
-does; `docs/design/system.md` storage and identity sections follow the
-code.
-
-Tests: daemon arms for enroll-as-root printing only, lazy token on audit,
-per-machine enrollment not revoking, ledger v2 chaining over a pre-0.5
-fixture, store and directory modes; a hook arm for an unreadable token file.
-
-Done when: the suite is green with those arms, the plugin validates, a
-foreground daemon on a temporary state directory accepts the same harness
-enrolled for two machines, and a store holding v1 and v2 ledger rows
-verifies intact.
+The mechanism is `docs/design/system.md`; the host step is the runbook
+below, still the owner's to run.
 
 ## Host cutover, a runbook the owner runs once
 
