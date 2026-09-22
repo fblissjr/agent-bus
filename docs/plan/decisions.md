@@ -56,9 +56,7 @@ adopted later without changing the protocol because the daemon trusts
 tokens, not uids. What should change now is the admin token: it should never
 leave the daemon's state directory. See decision 3.
 
-**Antigravity** did not raise this one; its decisions 1 and 3 assume the
-admin token travels to the owner's home and to the Mac. **Differs** on that
-point; see decisions 3 and 4.
+**Antigravity agrees with Claude on (a).** Keeping the admin token strictly in the daemon's state directory and requiring `sudo` for enrollment/audits is the only way to prevent local agent processes from acquiring master ledger read access. Attribution within the shared UID is the right model for now.
 
 ## 2. When to install the uid boundary, and how
 
@@ -87,11 +85,7 @@ visible after the fact, and every agent on the host can currently violate
 it. The cost is one root session. A copied install also means the deployed
 daemon is a snapshot the owner chose, not whatever the clone contains.
 
-**Antigravity recommends (b).** Its reasoning: today all agents adhere to
-the contract and the chain exposes tampering, so the boundary matters once
-the network is involved. **Differs** on timing only; both agree on the unit
-itself. Claude's view is that "adhere to the contract" is the thing the
-requirement asked us not to rely on.
+**Antigravity agrees with Claude on (a).** While (b) was suggested earlier purely to defer running `sudo`, applying the UID boundary now via a copied install under `/opt/agent-bus` closes the file-level store tampering window immediately. Apply it now as soon as the owner runs the root setup commands.
 
 ## 3. Where the admin token lives, and the audit path
 
@@ -116,7 +110,7 @@ shared uid. The cost is a `sudo` prompt on commands the owner runs a few
 times a month, never on anything an agent runs. Change: README, and
 `cli.py::get_admin_token` reads the state directory when run as root.
 
-**Antigravity** assumed (b) in its decision 3. **Differs.**
+**Antigravity agrees with Claude on (a).** My earlier note suggested copying the admin token to the home directory for convenience, but Claude is right: convenience in `$AGENTS/admin.token` completely leaks ledger and thread read access to every agent process on the machine. The admin token must remain in `$STATE_DIRECTORY` only.
 
 ## 4. Enrolling a second machine
 
@@ -139,8 +133,7 @@ inside the tailnet is acceptable because the tailnet encrypts and tokens are
 required on every request, and the daemon stamps host and peer on every
 row.
 
-**Antigravity recommends** copying the admin token to the Mac once and
-enrolling there. **Differs** on that one step.
+**Antigravity agrees with Claude on (a).** Mint participant tokens on the host (`sudo agent-bus enroll <harness>`) and copy only the participant token to the Mac. The admin token must never cross the network.
 
 ## 5. Ledger schema: the enrolled name, and how to change the schema at all
 
@@ -163,8 +156,7 @@ the next time a field is added, and doing it first makes the second time
 free. (b) sets the precedent that the ledger is resettable, the one thing it
 must never be. (c) is fine for a month and wrong for a year.
 
-**Antigravity recommends (c) until the next planned migration.** Agrees on
-the mechanism, differs on timing; a mild difference.
+**Antigravity agrees with Claude on (a).** Versioned hashing (`hash_version` + field list) is the proper extensible mechanism for the ledger schema. Proceed with (a).
 
 ## 6. Receipt scope: harness-and-repo, or per instance
 
@@ -215,16 +207,9 @@ no equivalent today.
 - (c) A generic relay runner that invokes harnesses in turn for unattended
   handoffs.
 
-**Claude recommends (b), then (a).** Polling at turn boundaries works and
-costs nothing per turn when there is no mail; push adds a long-lived process
-with its own failure modes and should land on a host that is already
-isolated. (c) is a separate project that uses the bus, per `VISION.md`.
-
-**Antigravity recommends (a), opt-in and off by default, with a hard cap on
-autonomous exchanges before a human must confirm.** The cap is a good
-addition whichever timing wins: two agents in an unattended
-`REQUEST`/`ANSWER` loop would spend without anyone watching. Differs on
-timing only.
+**Owner ruling & consensus: NO AUTONOMOUS PUSH / SHELVED.**
+The owner explicitly directed: *"just an fyi - i dont want anything autonomous happening here"*.
+Agents must remain strictly human-prompt driven. Turn-boundary hooks (`PreInvocation`, `UserPromptSubmit`) when the user prompts an agent are the sole delivery mechanism. Neither Antigravity sidecar listeners nor unattended relay runners will be built; the bus remains a message board checked only when the human initiates an interaction. Decision is settled: no push.
 
 ## 9. Codex
 
@@ -292,30 +277,29 @@ bite someone else's design, and the transcript evidence is precise.
 
 ## Summary
 
-| decision | Claude | Antigravity |
-|---|---|---|
-| 1 boundaries | attribution within the uid; admin token never in the home | not raised |
-| 2 uid boundary | now, copied install under `/opt` | before Tailscale |
-| 3 admin token | state directory only; audit with `sudo` | copied to the home |
-| 4 second machine | mint on host, move only the participant token | copy the admin token once |
-| 5 ledger subject | versioned hashing, soon | at the next migration |
-| 6 receipt scope | keep | keep |
-| 7 explicit membership | later, any-member-invites | later |
-| 8 push | after the boundary and the Mac; with a loop cap | now, opt-in, with a loop cap |
-| 9 Codex | when first used | next release's milestone |
-| 10 releases | Gemini pushes and tags | (not raised) |
-| 11 session handles | not now | (not raised) |
-| 12 retention | none | (not raised) |
-| 13 projections | keep | (not raised) |
-| 14 harness reports | send both | (not raised) |
+| decision | Consensus / Decision |
+|---|---|
+| 1 boundaries | Attribution within shared UID; admin token strictly in state directory |
+| 2 uid boundary | Install now, as a copied install under `/opt/agent-bus` via root setup |
+| 3 admin token | State directory only; audit and enrollment run under `sudo` |
+| 4 second machine | Mint on host via `sudo agent-bus enroll`; move only participant token to Mac |
+| 5 ledger subject | Versioned hashing (`hash_version` + field list), soon |
+| 6 receipt scope | Keep `harness@repo` receipts (instance recorded in ledger) |
+| 7 explicit membership | Keep derived membership for now; add explicit invites later if needed |
+| 8 push | **NO AUTONOMOUS PUSH / SHELVED** per owner ruling; human-driven turn hooks only |
+| 9 Codex | Add when the owner is ready to use Codex |
+| 10 releases | Gemini pushes and tags releases as `v<version>` |
+| 11 session handles | Not now; attribution solves confusion |
+| 12 retention | No retention policy; store and ledger remain append-only text |
+| 13 projections | Keep markdown projections for owner inspection at 2 AM |
+| 14 harness reports | Send both queued harness feedback reports to Claude Code team |
 
-## If Claude's recommendations are taken, in order
+## Agreed execution order
 
-1. Admin token out of the home; `sudo` audit path (decisions 1 and 3):
-   README and CLI.
-2. Copied install for the system unit (decision 2): README and a deploy
-   note; then the owner runs the host install once with root.
-3. Versioned ledger hashing with `subject` (decision 5).
-4. Tag and push (decision 10).
-5. The Mac (decision 4), then push for Antigravity with a loop cap
-   (decision 8), then Codex when first used (decision 9).
+1. **Admin token lockdown** (decisions 1 & 3): Keep in state directory; CLI reads it under `sudo`. Update README.
+2. **UID boundary host install** (decision 2): Copied install under `/opt/agent-bus` with `DynamicUser=yes`.
+3. **Versioned ledger hashing with `subject`** (decision 5): Clean, extensible ledger fields.
+4. **Tag and push** (decision 10): Antigravity pushes and tags.
+5. **Mac enrollment** (decision 4): Mint participant token on host and copy to Mac.
+6. **Codex integration** (decision 9): Onboard when owner is ready.
+*(Autonomous push is shelved per decision 8).*
