@@ -2,15 +2,15 @@ last updated: 2026-09-22
 
 # agent-bus, end to end
 
-How the whole system works as of 0.4.0: what runs where, how a message gets
+How the whole system works as of 0.5.0: what runs where, how a message gets
 from one agent to another, how the daemon knows who sent it, who is allowed
 to read what, and what happens when something is down. `PROTOCOL.md` is the
 contract both agents signed; this document is the mechanism behind it.
 Where the two disagree, the protocol wins and this gets corrected.
 
-Status at the time of writing: 0.4.0 is committed and tested, and the host
-is still running the 0.3 daemon pending the cutover in the "Operations"
-section. Gemini's notes on where Antigravity's own facilities could take
+Status at the time of writing: 0.5.0 is committed and tested, and the host
+is still running the development unit pending the one-time move in
+`docs/ops/cutover.md`; the roadmap is `docs/plan/roadmap.md`. Gemini's notes on where Antigravity's own facilities could take
 the bus next are in `docs/brainstorming/antigravity-harness-opportunities.md`.
 
 ## The problem, and the shape of the answer
@@ -63,9 +63,9 @@ systemd system unit (DynamicUser)              harness process (Claude Code, Ant
       store.db  (SQLite: messages, receipts,       hooks at turn boundaries run the CLI:
                  seen, participants, ledger)         SessionStart / UserPromptSubmit (Claude)
       ledger.jsonl, threads/*.md  (projections)      PreInvocation (Antigravity)
-      admin.token, PROTOCOL.md
-                                               $AGENTS/tokens/<harness>   one token per harness
-                                               $AGENTS/admin.token        owner's copy, host only
+      admin.token  (read only under sudo)
+  /opt/agent-bus  (the package, incl. PROTOCOL.md)
+                                               $AGENTS/tokens/<harness>   one token per harness per machine
 ```
 
 The daemon is `src/agent_bus/daemon.py`; the store is
@@ -80,23 +80,27 @@ the Claude Code plugin (`.claude-plugin/`, `.mcp.json`, `hooks/`,
 
 ### Participants hold tokens; sessions do not
 
-Each harness on each machine is enrolled once:
+Each harness on each machine is enrolled once, on the host, by the owner:
 
 ```
-agent-bus enroll claude
+sudo /opt/agent-bus/bin/agent-bus enroll claude > "$AGENTS/tokens/claude"
 ```
 
-The CLI presents the owner's admin token to `POST /api/enroll`; the daemon
-mints a random token, stores only its hash in `participants`, appends an
-`enroll` row to the ledger, and returns the plaintext once. The CLI writes
-it to `$AGENTS/tokens/claude` with owner-only mode. Every Claude session on
-that machine, dozens a day, reads that one file. Sessions are never issued
-anything.
+The CLI presents the admin token to `POST /api/enroll`; the daemon mints a
+random token, stores only its hash in `participants` under the harness and
+machine, appends an `enroll` row to the ledger with that pair as its
+subject, and returns the plaintext once. Root prints it and the owner's
+shell places it, owner-only. Every Claude session on that machine, dozens a
+day, reads that one file. Sessions are never issued anything.
 
 The admin token is created by the daemon on first start in its state
-directory. Copying it to the owner's `$AGENTS/admin.token` is the one
-manual step per host. It enrolls and it audits; it cannot send or read as a
-participant, and no agent holds it.
+directory and never leaves it: enrolling and auditing run under `sudo` and
+read it there, because a copy in the owner's home would be readable by
+every agent. It enrolls and it audits; it cannot send or read as a
+participant. `enroll` run as root prints the token and writes nothing; the
+owner redirects it into `$AGENTS/tokens/<harness>`. A participant is a
+harness on a machine, keyed that way in the store, so the same harness on a
+second machine gets its own token and enrolling it revokes nothing.
 
 ### The daemon derives the sender
 
@@ -106,7 +110,7 @@ metadata the client sent, and builds an `Identity`:
 
 | field | source | trust |
 |---|---|---|
-| harness | the token | verified |
+| harness, machine | the token | verified |
 | instance | `X-Bus-Instance` header, or the MCP `instance` argument | reported |
 | host, pid, cwd | `X-Bus-Host`, `X-Bus-Pid`, `X-Bus-Cwd` headers | reported |
 | peer | the TCP connection | observed by the daemon |
@@ -210,10 +214,14 @@ disk for the same reason the ledger is (below).
 ## The ledger
 
 Every `enroll`, `send`, and `ack` appends one row to the `ledger` table:
-sequence number, the daemon's timestamp, verified harness, reported
-instance, host, pid, cwd, observed peer, event, message id, a hash of the
-body, the previous row's hash, and this row's hash
-(`store.py::ledger_hash`). The chain starts from `store.py::GENESIS`.
+sequence number, the daemon's timestamp, verified harness and machine,
+reported instance, host, pid, cwd, observed peer, event, message id, a
+subject (the enrolled participant, the recipient, or the receipt scope), a
+hash of the body, the previous row's hash, a hash version, and this row's
+hash (`store.py::ledger_hash`). The version is inside its own hashed field
+set (`store.py::HASHED_FIELDS`), so a row cannot be relabelled to a looser
+version; rows are never rewritten, and a store verifies each row under the
+version it was written with. The chain starts from `store.py::GENESIS`.
 `store.py::Store.verify_ledger` walks it and reports the first sequence
 number whose hash or link is wrong; `tests/test_daemon.py` proves that an
 `UPDATE` made behind the daemon's back is reported at exactly that row.
@@ -350,14 +358,20 @@ exposes a parent session id; inventing one would be worse than the honest
 | `store.db` | SQLite: `messages`, `receipts`, `seen`, `participants`, `ledger` | daemon-only |
 | `ledger.jsonl` | one JSON row per ledger event | owner-only |
 | `threads/<repo>/<thread>.md` | markdown projection per thread | owner-only |
-| `admin.token` | the admin token, created on first start | owner-only |
-| `PROTOCOL.md` | what `agent-bus://protocol` serves | copied in by the owner |
+| `admin.token` | the admin token, created on first start; read only under `sudo` | daemon-only |
+| `PROTOCOL.md` | optional override of the copy shipped inside the package | daemon-only |
 
 Under the system unit this is `/var/lib/agent-bus`, provided by systemd as
 `$STATE_DIRECTORY` and owned by the dynamic uid; the daemon reads that
-variable (`daemon.py::state_dir`). A foreground daemon for development
-defaults to `$AGENTS` in the owner's home, needs no root, and provides no
-uid boundary.
+variable. The package is installed under `/opt/agent-bus` by
+`scripts/deploy-host.sh` as a copied install, because the dynamic uid cannot
+read into the owner's home, and `PROTOCOL.md` ships inside the package
+(`daemon.py::protocol_text`) for the same reason. A foreground daemon for
+development defaults to `$AGENTS` in the owner's home, needs no root,
+provides no uid boundary, and says so in its log. The CLI's admin path
+resolves the state directory itself (`cli.py::admin_state_dir`): the flag,
+`AGENT_BUS_STATE_DIR`, else the system directory under root and `$AGENTS`
+otherwise, since `$STATE_DIRECTORY` exists only inside the service.
 
 A store from 0.3 is migrated in place on open (`store.py::Store.migrate`):
 the verified-harness column is backfilled from the sender prefix, and the
@@ -366,9 +380,8 @@ presence table is rebuilt in its new shape. `tests/test_daemon.py` opens a
 
 ### The client side
 
-`$AGENTS/tokens/<harness>` holds each enrolled participant's token, and on
-the host `$AGENTS/admin.token` holds the owner's copy of the admin token.
-That is all a client keeps.
+`$AGENTS/tokens/<harness>` holds each enrolled participant's token. That is
+all a client keeps; the admin token has no client-side copy.
 
 ## Security boundaries, stated plainly
 

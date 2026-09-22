@@ -65,5 +65,5 @@ owner's prompt decides what this turn is for:
 Nothing on the bus runs without a person's prompt; there are no wake-ups.
 Reply over the bus, not by asking the owner to relay.
 
-If a bus call fails, check `systemctl --user status agent-bus` on the host and
-tell the owner; do not start or restart the daemon on your own.
+If a bus call fails, check `systemctl status agent-bus` on the host and tell
+the owner; do not start or restart the daemon on your own.

@@ -4,9 +4,11 @@ ledger's chain and its admin-only door, and the MCP tool path carrying the
 caller through the context variable."""
 
 import json
+import os
 import socket
 import sqlite3
 import stat
+import sys
 import threading
 import time
 import urllib.error
@@ -134,8 +136,89 @@ def test_ledger_is_admin_only_chained_and_tamper_evident(bus):
 def test_state_files_are_owner_only(bus):
     claude = bus.enroll("claude")
     bus.call("POST", "/api/send", claude, {"to": "all", "repo": "r", "status": "FYI", "body": "one", "thread": "t"})
-    for p in (bus.state / "ledger.jsonl", bus.state / "threads" / "r" / "t.md"):
+    for p in (bus.state / "store.db", bus.state / "ledger.jsonl", bus.state / "threads" / "r" / "t.md"):
         assert stat.S_IMODE(p.stat().st_mode) == 0o600, p
+    assert stat.S_IMODE(bus.state.stat().st_mode) == 0o700
+
+
+def test_enrolling_the_same_harness_for_another_machine_does_not_revoke(bus):
+    import socket
+    here = bus.enroll("claude")
+    code, out = bus.call("POST", "/api/enroll", ADMIN, {"name": "claude", "machine": "mac"})
+    assert code == 200 and out["machine"] == "mac"
+    mac = out["token"]
+    assert bus.call("GET", "/api/whoami?repo=r", here)[1]["machine"] == socket.gethostname()
+    assert bus.call("GET", "/api/whoami?repo=r", mac)[1]["machine"] == "mac"
+    rows = bus.call("GET", "/api/ledger", ADMIN)[1]["rows"]
+    assert [r["subject"] for r in rows] == [f"claude@{socket.gethostname()}", "claude@mac"]
+    assert all(r["hash_version"] == 2 for r in rows)
+
+
+def test_ledger_v2_verifies_over_a_v1_store(tmp_path):
+    """A 0.4 store (participants by name, ledger version 1) opens, keeps verifying its old
+    rows under the version-1 field list, and chains new version-2 rows onto them."""
+    import socket
+    from agent_bus.store import GENESIS, Identity, ledger_hash, token_hash
+    db = sqlite3.connect(tmp_path / "store.db")
+    db.executescript("""
+        CREATE TABLE participants (name TEXT PRIMARY KEY, token_hash TEXT NOT NULL, ts TEXT NOT NULL);
+        CREATE TABLE ledger (seq INTEGER PRIMARY KEY, ts TEXT NOT NULL, event TEXT NOT NULL, harness TEXT NOT NULL,
+            instance TEXT, host TEXT, pid INTEGER, cwd TEXT, peer TEXT, message_id INTEGER, body_hash TEXT,
+            prev_hash TEXT NOT NULL, hash TEXT NOT NULL);
+    """)
+    db.execute("INSERT INTO participants VALUES ('claude', ?, '2026-09-22T17:22:11Z')", (token_hash("old-claude-token"),))
+    prev = GENESIS
+    for seq in (1, 2):
+        row = {"seq": seq, "ts": "2026-09-22T17:22:11Z", "event": "enroll", "harness": "admin", "instance": None, "host": "vojo", "pid": None, "cwd": None, "peer": "127.0.0.1", "message_id": None, "body_hash": None, "prev_hash": prev}
+        row["hash"] = ledger_hash(row)
+        db.execute("INSERT INTO ledger VALUES (:seq, :ts, :event, :harness, :instance, :host, :pid, :cwd, :peer, :message_id, :body_hash, :prev_hash, :hash)", row)
+        prev = row["hash"]
+    db.commit()
+    db.close()
+    store = Store(tmp_path)
+    assert store.verify("old-claude-token") == ("claude", socket.gethostname())
+    assert store.verify_ledger() is None
+    store.enroll("antigravity", "vojo", Identity("admin"))
+    assert store.verify_ledger() is None
+    versions = [r["hash_version"] for r in store.ledger()]
+    assert versions == [1, 1, 2]
+    with sqlite3.connect(tmp_path / "store.db") as raw:
+        raw.execute("UPDATE ledger SET hash_version = 2 WHERE seq = 1")
+    assert store.verify_ledger() == 1  # relabelling a row to another version breaks it
+
+
+def cli(bus, args, home, token_env=None, stdin=b""):
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if not (k.startswith("AGENT_BUS_") or k.startswith("CLAUDE_"))}
+    env.update({"AGENT_BUS_SERVER": bus.url, "HOME": str(home), "AGENT_BUS_ADMIN_TOKEN": ADMIN})
+    env.update(token_env or {})
+    return subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / "src" / "agent_bus" / "cli.py"), *args], input=stdin, capture_output=True, env=env, timeout=30, cwd=str(home))
+
+
+def test_cli_audit_needs_no_participant_token(bus, tmp_path):
+    import os, sys  # noqa: F401  (used by cli())
+    claude = bus.enroll("claude")
+    bus.call("POST", "/api/send", claude, {"to": "antigravity@r", "repo": "r", "status": "FYI", "body": "audited", "thread": "t"})
+    r = cli(bus, ["show", "t", "--repo", "r", "--audit"], tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "audited" in r.stdout.decode()
+    r = cli(bus, ["ledger"], tmp_path)
+    assert r.returncode == 0 and "enroll" in r.stdout.decode() and "claude@" in r.stdout.decode()
+
+
+def test_cli_enroll_for_another_machine_prints_and_writes_nothing(bus, tmp_path):
+    r = cli(bus, ["enroll", "claude", "--machine", "mac"], tmp_path)
+    assert r.returncode == 0, r.stderr
+    token = r.stdout.decode().strip()
+    assert token and not (tmp_path / ".agents" / "tokens").exists()
+    assert bus.call("GET", "/api/whoami?repo=r", token)[1]["machine"] == "mac"
+
+
+def test_enrolled_token_destination_rules():
+    from agent_bus.cli import TOKENS, enrolled_token_destination
+    assert enrolled_token_destination("claude", "here", euid=0, this_host="here") is None
+    assert enrolled_token_destination("claude", "mac", euid=1000, this_host="here") is None
+    assert enrolled_token_destination("claude", "here", euid=1000, this_host="here") == TOKENS / "claude"
 
 
 def test_migrates_a_0_3_store(tmp_path):

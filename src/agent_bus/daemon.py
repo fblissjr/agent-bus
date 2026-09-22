@@ -2,20 +2,23 @@
 JSON routes under /api for the CLI and hooks. One process, one store.
 
 Every request carries a participant token. The daemon resolves it to a harness
-and reads the X-Bus-* headers the CLI sends about its instance; that Identity
-rides a context variable into the tool and route handlers, which never see the
-credential and cannot choose who they are.
+on a machine and reads the X-Bus-* headers the CLI sends about its instance;
+that Identity rides a context variable into the tool and route handlers, which
+never see the credential and cannot choose who they are.
 
 Push: every send publishes ResourceUpdated for agent-bus://inbox/<to>, so a
-client holding a subscriptions/listen stream on the URIs its address matches
-hears about new mail without polling."""
+client that is already running and holds a subscriptions/listen stream on the
+URIs its address matches hears about new mail without polling. Nothing is
+woken."""
 
 import argparse
 import json
 import logging
 import os
 import secrets
+import socket
 from contextvars import ContextVar
+from importlib.resources import files
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -40,10 +43,6 @@ log = logging.getLogger("agent-bus")
 caller: ContextVar[Identity] = ContextVar("caller")
 
 
-def state_dir():
-    return Path(os.environ.get("STATE_DIRECTORY") or DEFAULT_STATE_DIR)
-
-
 def load_admin_token(path):
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -54,17 +53,29 @@ def load_admin_token(path):
     return path.read_text().strip()
 
 
+def protocol_text(state_dir):
+    """PROTOCOL.md ships inside the package, so the service uid needs no copy; a copy in the state directory overrides it."""
+    copy = state_dir / "PROTOCOL.md"
+    if copy.exists():
+        return copy.read_text()
+    return files("agent_bus").joinpath("PROTOCOL.md").read_text()
+
+
 def participant_auth(app, store, admin_token):
-    """Resolve the bearer token to a harness and stash the caller's Identity for the handlers."""
+    """Resolve the bearer token to a participant and stash the caller's Identity for the handlers."""
 
     async def wrapped(scope, receive, send):
         if scope["type"] != "http":
             return await app(scope, receive, send)
         headers = {k.decode(): v.decode() for k, v in scope["headers"]}
         token = headers.get("authorization", "").removeprefix("Bearer ").strip()
-        harness = ADMIN if token and secrets.compare_digest(token, admin_token) else (store.verify(token) if token else None)
-        if harness is None:
-            return await JSONResponse({"error": "missing or bad bearer token"}, status_code=401)(scope, receive, send)
+        if token and secrets.compare_digest(token, admin_token):
+            harness, machine = ADMIN, None
+        else:
+            found = store.verify(token) if token else None
+            if found is None:
+                return await JSONResponse({"error": "missing or bad bearer token"}, status_code=401)(scope, receive, send)
+            harness, machine = found
         pid = headers.get("x-bus-pid")
         identity = Identity(
             harness=harness,
@@ -73,6 +84,7 @@ def participant_auth(app, store, admin_token):
             pid=int(pid) if pid and pid.isdigit() else None,
             cwd=headers.get("x-bus-cwd") or None,
             peer=scope["client"][0] if scope.get("client") else None,
+            machine=machine,
         )
         reset = caller.set(identity)
         try:
@@ -89,7 +101,7 @@ def participant(instance=None):
     if identity.harness == ADMIN:
         raise ValueError("the admin token cannot send or read; enroll a participant")
     if instance:
-        identity = Identity(identity.harness, instance, identity.host, identity.pid, identity.cwd, identity.peer)
+        identity = Identity(identity.harness, instance, identity.host, identity.pid, identity.cwd, identity.peer, identity.machine)
     return identity
 
 
@@ -137,7 +149,7 @@ def build_server(store):
 
     @server.resource("agent-bus://protocol", mime_type="text/markdown", description="The bus protocol: addresses, envelope, working rules.")
     def protocol() -> str:
-        return (store.state_dir / "PROTOCOL.md").read_text()
+        return protocol_text(store.state_dir)
 
     @server.resource("agent-bus://inbox/{address}", mime_type="application/json", description="Unacked messages for an address of your harness. Subscribe to this URI to be told when new mail arrives.")
     def inbox_resource(address: str) -> str:
@@ -164,14 +176,15 @@ def build_server(store):
         if identity.harness != ADMIN:
             raise ValueError("enroll needs the admin token")
         p = await json_body(request)
-        return {"name": p["name"], "token": store.enroll(p["name"], identity)}
+        machine = p.get("machine") or socket.gethostname()
+        return {"name": p["name"], "machine": machine, "token": store.enroll(p["name"], machine, identity)}
 
     @server.custom_route("/api/whoami", methods=["GET"])
     @api
     async def api_whoami(request):
         identity = participant()
         repo = request.query_params.get("repo") or (Path(identity.cwd).name if identity.cwd else None)
-        return {"harness": identity.harness, "instance": identity.instance, "host": identity.host, "address": identity.address(repo) if repo else None}
+        return {"harness": identity.harness, "machine": identity.machine, "instance": identity.instance, "host": identity.host, "address": identity.address(repo) if repo else None}
 
     @server.custom_route("/api/send", methods=["POST"])
     @api
@@ -225,9 +238,13 @@ def main():
     parser = argparse.ArgumentParser(description="agent-bus daemon")
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--state-dir", type=Path, default=state_dir(), help="where store.db, threads/, ledger.jsonl, admin.token, and PROTOCOL.md live")
+    parser.add_argument("--state-dir", type=Path, help="where store.db, threads/, ledger.jsonl, and admin.token live (default: $STATE_DIRECTORY from systemd, else the development directory under the home)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
-    store = Store(args.state_dir)
-    admin_token = load_admin_token(args.state_dir / "admin.token")
+    state_dir = args.state_dir or (Path(os.environ["STATE_DIRECTORY"]) if os.environ.get("STATE_DIRECTORY") else None)
+    if state_dir is None:
+        state_dir = DEFAULT_STATE_DIR
+        log.warning("state under %s: development only. No uid boundary; every process of this user can read and rewrite the store and the ledger.", state_dir)
+    store = Store(state_dir)
+    admin_token = load_admin_token(state_dir / "admin.token")
     uvicorn.run(build_app(args.host, store, admin_token), host=args.host, port=args.port, log_level="info")

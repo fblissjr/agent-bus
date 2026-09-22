@@ -139,6 +139,18 @@ def test_silent_without_any_token(stub, tmp_path):
     assert r.returncode == 0 and r.stdout == b""
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can read a mode-0 file")
+def test_silent_when_token_file_is_unreadable(stub, tmp_path):
+    """A token file the owner cannot read (wrong mode, wrong owner after a sudo mistake) must not become a per-prompt traceback."""
+    stub.inbox = [MESSAGE]
+    tokens = tmp_path / ".agents" / "tokens"
+    tokens.mkdir(parents=True)
+    (tokens / "claude").write_text(TOKEN + "\n")
+    (tokens / "claude").chmod(0)
+    r = run_hook("claude", stub.url, token=None, home=tmp_path, stdin=CLAUDE_PROMPT)
+    assert r.returncode == 0 and r.stdout == b"" and r.stderr == b""
+
+
 def test_antigravity_acks_on_delivery_with_its_conversation_id(stub):
     stub.inbox = [MESSAGE]
     r = run_hook("antigravity", stub.url, stdin=json.dumps({"conversationId": "b2d1b325-5033-4ccf-b7b4-136ba418c865", "workspacePaths": ["/tmp/some-repo"]}).encode())

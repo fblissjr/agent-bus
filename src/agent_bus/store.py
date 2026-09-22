@@ -7,7 +7,8 @@ components the `to` leaves out are wildcards. `all` as the harness matches every
 harness. So `to=claude@X` reaches `claude@X#a1` and `claude@X#b2`, while
 `to=claude@X#a1` reaches only that instance.
 
-The harness half of a sender is verified from its token; the instance, host,
+A participant is a harness on a machine and holds one token. The harness and
+machine halves of a sender are verified from that token; the instance, host,
 pid, and cwd are reported by the client and recorded as such. Receipts are
 scoped to `harness@repo`, so a broadcast to `claude@X` is settled for every
 Claude in X by the first one to ack it, and a new session does not inherit the
@@ -23,6 +24,7 @@ import json
 import os
 import re
 import secrets
+import socket
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -39,7 +41,7 @@ DEFAULT_INSTANCE = "default"
 # An instance counts as active in who() if it called any tool within this window.
 ACTIVE_WINDOW = timedelta(minutes=15)
 
-# repo and thread become path components under threads/.
+# repo, thread, and machine become path components or address parts.
 SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 HARNESS = re.compile(r"^[a-z][a-z0-9_-]*$")
 ADDRESS = re.compile(r"^(?P<agent>[a-z][a-z0-9_-]*)(?:@(?P<repo>[A-Za-z0-9][A-Za-z0-9._-]*))?(?:#(?P<instance>[A-Za-z0-9][A-Za-z0-9._-]*))?$")
@@ -75,9 +77,11 @@ CREATE TABLE IF NOT EXISTS seen (
     ts TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS participants (
-    name TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    machine TEXT NOT NULL,
     token_hash TEXT NOT NULL,
-    ts TEXT NOT NULL
+    ts TEXT NOT NULL,
+    PRIMARY KEY (name, machine)
 );
 CREATE TABLE IF NOT EXISTS ledger (
     seq INTEGER PRIMARY KEY,
@@ -92,14 +96,24 @@ CREATE TABLE IF NOT EXISTS ledger (
     message_id INTEGER,
     body_hash TEXT,
     prev_hash TEXT NOT NULL,
-    hash TEXT NOT NULL
+    hash TEXT NOT NULL,
+    machine TEXT,
+    subject TEXT,
+    hash_version INTEGER NOT NULL DEFAULT 1
 );
 """
 
 COLUMNS = ("id", "ts", "from", "to", "repo", "thread", "status", "verb", "sha", "files", "body")
 SELECT = "SELECT id, ts, sender, recipient, repo, thread, status, verb, sha, files, body FROM messages"
-LEDGER_FIELDS = ("seq", "ts", "event", "harness", "instance", "host", "pid", "cwd", "peer", "message_id", "body_hash", "prev_hash")
 GENESIS = "0" * 64
+# What each hash version covers. The version is inside its own field set so a row
+# cannot be re-labelled to a looser version. Rows are never rewritten; a store
+# holds rows of every version it has ever written, each verified under its own.
+LEDGER_FIELDS_V1 = ("seq", "ts", "event", "harness", "instance", "host", "pid", "cwd", "peer", "message_id", "body_hash", "prev_hash")
+LEDGER_FIELDS_V2 = LEDGER_FIELDS_V1 + ("machine", "subject", "hash_version")
+HASHED_FIELDS = {1: LEDGER_FIELDS_V1, 2: LEDGER_FIELDS_V2}
+LEDGER_VERSION = 2
+LEDGER_FIELDS = LEDGER_FIELDS_V2
 
 # Functional form because `from` is a keyword. This is the tools' output schema.
 Message = TypedDict("Message", {"id": int, "ts": str, "from": str, "to": str, "repo": str, "thread": str, "status": str, "verb": str | None, "sha": str | None, "files": list[str], "body": str})
@@ -114,13 +128,14 @@ class Reader(TypedDict):
 
 @dataclass(frozen=True)
 class Identity:
-    """Who is calling: `harness` verified from the token, the rest reported by the client."""
+    """Who is calling: `harness` and `machine` verified from the token, the rest reported by the client."""
     harness: str
     instance: str | None = None
     host: str | None = None
     pid: int | None = None
     cwd: str | None = None
     peer: str | None = None
+    machine: str | None = None
 
     def address(self, repo):
         """The derived sender address. The caller's own checkout wins over the message's repo."""
@@ -177,7 +192,8 @@ def format_message(msg):
 
 
 def ledger_hash(row):
-    return hashlib.sha256(json.dumps({k: row[k] for k in LEDGER_FIELDS}, sort_keys=True).encode()).hexdigest()
+    fields = HASHED_FIELDS[row.get("hash_version") or 1]
+    return hashlib.sha256(json.dumps({k: row.get(k) for k in fields}, sort_keys=True).encode()).hexdigest()
 
 
 def locked(fn):
@@ -191,11 +207,14 @@ class Store:
     def __init__(self, state_dir=DEFAULT_STATE_DIR):
         self.state_dir = Path(state_dir)
         self.state_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(self.state_dir, 0o700)
         self.threads_dir = self.state_dir / "threads"
         self.ledger_path = self.state_dir / "ledger.jsonl"
+        db_path = self.state_dir / "store.db"
         # MCP tools run in worker threads and the /api routes on the event loop;
         # one connection behind one lock serves both and keeps projection appends ordered.
-        self.db = sqlite3.connect(self.state_dir / "store.db", isolation_level=None, check_same_thread=False)
+        self.db = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
+        os.chmod(db_path, 0o600)
         self.lock = threading.Lock()
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA foreign_keys=ON")
@@ -203,8 +222,10 @@ class Store:
         self.migrate()
 
     def migrate(self):
-        """0.3 stores predate verified senders and instances: backfill the harness from the
-        sender prefix, and rebuild the transient presence table in its new shape."""
+        """Older stores open in place. 0.3: senders were unverified and presence had a
+        different shape. 0.4: participants were keyed by name alone and the ledger was
+        version 1; existing participants belong to this machine, and existing ledger
+        rows keep verifying under the version-1 field list."""
         columns = {r[1] for r in self.db.execute("PRAGMA table_info(messages)")}
         if "harness" not in columns:
             self.db.execute("ALTER TABLE messages ADD COLUMN harness TEXT NOT NULL DEFAULT ''")
@@ -212,23 +233,36 @@ class Store:
         if "address" not in {r[1] for r in self.db.execute("PRAGMA table_info(seen)")}:
             self.db.execute("DROP TABLE seen")
             self.db.execute("CREATE TABLE seen (address TEXT PRIMARY KEY, harness TEXT NOT NULL, host TEXT, ts TEXT NOT NULL)")
+        if "machine" not in {r[1] for r in self.db.execute("PRAGMA table_info(participants)")}:
+            self.db.executescript("""
+                ALTER TABLE participants RENAME TO participants_v1;
+                CREATE TABLE participants (name TEXT NOT NULL, machine TEXT NOT NULL, token_hash TEXT NOT NULL, ts TEXT NOT NULL, PRIMARY KEY (name, machine));
+            """)
+            self.db.execute("INSERT INTO participants SELECT name, ?, token_hash, ts FROM participants_v1", (socket.gethostname(),))
+            self.db.execute("DROP TABLE participants_v1")
+        ledger_columns = {r[1] for r in self.db.execute("PRAGMA table_info(ledger)")}
+        for column, decl in (("machine", "TEXT"), ("subject", "TEXT"), ("hash_version", "INTEGER NOT NULL DEFAULT 1")):
+            if column not in ledger_columns:
+                self.db.execute(f"ALTER TABLE ledger ADD COLUMN {column} {decl}")
 
     # participants
 
     @locked
-    def enroll(self, name, identity):
-        """Mint a participant token, replacing any earlier one. Returns the plaintext once."""
+    def enroll(self, name, machine, identity):
+        """Mint a participant token, replacing any earlier one for that harness on that machine. Returns the plaintext once."""
         if not HARNESS.match(name or "") or name in ("all", "admin"):
             raise ValueError(f"bad participant name {name!r}")
+        check_slug("machine", machine)
         token = secrets.token_urlsafe(32)
-        self.db.execute("INSERT INTO participants (name, token_hash, ts) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET token_hash = excluded.token_hash, ts = excluded.ts", (name, token_hash(token), now()))
-        self.record("enroll", identity, body=name)
+        self.db.execute("INSERT INTO participants (name, machine, token_hash, ts) VALUES (?, ?, ?, ?) ON CONFLICT(name, machine) DO UPDATE SET token_hash = excluded.token_hash, ts = excluded.ts", (name, machine, token_hash(token), now()))
+        self.record("enroll", identity, subject=f"{name}@{machine}")
         return token
 
     @locked
     def verify(self, token):
-        row = self.db.execute("SELECT name FROM participants WHERE token_hash = ?", (token_hash(token),)).fetchone()
-        return row[0] if row else None
+        """The (harness, machine) a token belongs to, or None."""
+        row = self.db.execute("SELECT name, machine FROM participants WHERE token_hash = ?", (token_hash(token),)).fetchone()
+        return (row[0], row[1]) if row else None
 
     # messages
 
@@ -258,7 +292,7 @@ class Store:
         )
         self.touch(identity, sender)
         msg = self._get(cur.lastrowid)
-        self.record("send", identity, message_id=msg["id"], body=body)
+        self.record("send", identity, message_id=msg["id"], body=body, subject=to)
         self.project(msg)
         return msg
 
@@ -290,7 +324,7 @@ class Store:
         scope = receipt_scope(me)
         self.db.executemany("INSERT OR IGNORE INTO receipts (message_id, reader, ts) VALUES (?, ?, ?)", [(int(i), scope, ts) for i in ids])
         for i in ids:
-            self.record("ack", identity, message_id=int(i))
+            self.record("ack", identity, message_id=int(i), subject=scope)
         return len(ids)
 
     @locked
@@ -316,17 +350,18 @@ class Store:
 
     # ledger
 
-    def record(self, event, identity, message_id=None, body=None):
+    def record(self, event, identity, message_id=None, body=None, subject=None):
         """Append one hash-chained row. Callers hold the lock, so seq and prev_hash are consistent."""
         last = self.db.execute("SELECT seq, hash FROM ledger ORDER BY seq DESC LIMIT 1").fetchone()
         row = {
             "seq": (last[0] + 1) if last else 1, "ts": now(), "event": event, "harness": identity.harness, "instance": identity.instance,
             "host": identity.host, "pid": identity.pid, "cwd": identity.cwd, "peer": identity.peer,
             "message_id": message_id, "body_hash": hashlib.sha256(body.encode()).hexdigest() if body else None, "prev_hash": last[1] if last else GENESIS,
+            "machine": identity.machine, "subject": subject, "hash_version": LEDGER_VERSION,
         }
         row["hash"] = ledger_hash(row)
         self.db.execute(
-            "INSERT INTO ledger (seq, ts, event, harness, instance, host, pid, cwd, peer, message_id, body_hash, prev_hash, hash) VALUES (:seq, :ts, :event, :harness, :instance, :host, :pid, :cwd, :peer, :message_id, :body_hash, :prev_hash, :hash)",
+            f"INSERT INTO ledger ({', '.join(LEDGER_FIELDS)}, hash) VALUES ({', '.join(':' + f for f in LEDGER_FIELDS)}, :hash)",
             row,
         )
         with self.ledger_path.open("a") as f:
@@ -341,7 +376,7 @@ class Store:
 
     @locked
     def verify_ledger(self):
-        """Walk the chain from genesis; returns the first bad seq, or None when intact."""
+        """Walk the chain from genesis, each row under its own hash version; returns the first bad seq, or None when intact."""
         prev = GENESIS
         for r in self.db.execute(f"SELECT {', '.join(LEDGER_FIELDS)}, hash FROM ledger ORDER BY seq"):
             row = dict(zip(LEDGER_FIELDS + ("hash",), r))

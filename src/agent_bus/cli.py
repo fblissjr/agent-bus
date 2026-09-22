@@ -4,6 +4,11 @@
 Conforms to PROTOCOL.md. Identity is computed from the environment on every
 call and never remembered: the harness from which token file is used, the
 instance from the harness's own session id, the repo from the checkout.
+
+The admin path (enroll, ledger, show --audit) reads the admin token from the
+daemon's state directory. Under sudo that is the system state directory;
+$STATE_DIRECTORY exists only inside the service. Nothing is ever written
+under root's home: enroll as root prints the token and the owner places it.
 """
 
 import argparse
@@ -20,7 +25,7 @@ from pathlib import Path
 DEFAULT_SERVER = os.environ.get("AGENT_BUS_SERVER") or os.environ.get("AGENT_BUS_URL") or "http://127.0.0.1:8765"
 AGENTS = Path.home() / ".agents"
 TOKENS = AGENTS / "tokens"
-ADMIN_TOKEN_PATH = AGENTS / "admin.token"
+SYSTEM_STATE_DIR = Path("/var/lib/agent-bus")
 HARNESSES = ("claude", "antigravity", "codex", "owner")
 
 
@@ -81,18 +86,42 @@ def get_token(harness):
     if env:
         return env.strip()
     path = TOKENS / harness
-    if path.exists():
+    try:
         return path.read_text().strip()
-    raise BusError(f"no token for {harness}: run 'agent-bus enroll {harness}' or set AGENT_BUS_TOKEN_{harness.upper()}")
+    except FileNotFoundError:
+        raise BusError(f"no token for {harness}: run 'agent-bus enroll {harness}' or set AGENT_BUS_TOKEN_{harness.upper()}")
+    except OSError as e:
+        raise BusError(f"cannot read {path}: {e.strerror}")
 
 
-def get_admin_token():
+def admin_state_dir(explicit=None):
+    """Where the daemon keeps admin.token: the flag, the environment, else the system directory under root and the development one otherwise."""
+    if explicit:
+        return Path(explicit)
+    if os.environ.get("AGENT_BUS_STATE_DIR"):
+        return Path(os.environ["AGENT_BUS_STATE_DIR"])
+    return SYSTEM_STATE_DIR if os.geteuid() == 0 else AGENTS
+
+
+def get_admin_token(state_dir):
     env = os.environ.get("AGENT_BUS_ADMIN_TOKEN")
     if env:
         return env.strip()
-    if ADMIN_TOKEN_PATH.exists():
-        return ADMIN_TOKEN_PATH.read_text().strip()
-    raise BusError(f"no admin token at {ADMIN_TOKEN_PATH}; copy it from the daemon's state directory")
+    path = Path(state_dir) / "admin.token"
+    try:
+        return path.read_text().strip()
+    except OSError as e:
+        raise BusError(f"no admin token at {path} ({e.strerror}); the admin path runs where the daemon keeps its state, under sudo on the host")
+
+
+def enrolled_token_destination(name, machine, euid=None, this_host=None):
+    """Where an enrolled token is written, or None to print it instead. Never under root's
+    home, and never for another machine: the owner moves those by hand."""
+    euid = os.geteuid() if euid is None else euid
+    this_host = this_host or socket.gethostname()
+    if euid == 0 or machine != this_host:
+        return None
+    return TOKENS / name
 
 
 # transport
@@ -129,13 +158,20 @@ def api_call(endpoint, token, method="GET", payload=None, instance=None):
 
 
 class Caller:
-    """Everything a command needs to speak as one participant instance."""
+    """Everything a command needs to speak as one participant instance. The token is
+    read only when a call is made, so audit commands never need a participant token."""
 
     def __init__(self, harness=None, hook_in=None):
         self.harness = harness or detect_harness()
         self.instance = detect_instance(self.harness, hook_in)
         self.repo = detect_repo(hook_in.get("cwd") if hook_in and hook_in.get("cwd") else None)
-        self.token = get_token(self.harness)
+        self._token = None
+
+    @property
+    def token(self):
+        if self._token is None:
+            self._token = get_token(self.harness)
+        return self._token
 
     @property
     def me(self):
@@ -240,7 +276,7 @@ def cmd_show(args):
     repo = args.repo or c.repo
     thread = args.thread or "general"
     query = urllib.parse.urlencode({"repo": repo, "thread": thread})
-    token = get_admin_token() if args.audit else c.token
+    token = get_admin_token(admin_state_dir(args.state_dir)) if args.audit else c.token
     msgs = api_call(f"/api/thread?{query}", token, instance=c.instance)
     if args.json:
         print(json.dumps(msgs, indent=2))
@@ -258,17 +294,24 @@ def cmd_whoami(args):
 
 
 def cmd_enroll(args):
-    admin = get_admin_token()
-    res = api_call("/api/enroll", admin, method="POST", payload={"name": args.name})
+    admin = get_admin_token(admin_state_dir(args.state_dir))
+    machine = args.machine or socket.gethostname()
+    res = api_call("/api/enroll", admin, method="POST", payload={"name": args.name, "machine": machine})
+    path = enrolled_token_destination(args.name, machine)
+    if path is None:
+        # Printed, not written: under root the file would land in root's home, and a token
+        # for another machine is carried there by the owner.
+        print(res["token"])
+        print(f"enrolled {args.name} on {machine}; place the token above at $AGENTS/tokens/{args.name} on that machine, mode 600", file=sys.stderr)
+        return
     TOKENS.mkdir(parents=True, exist_ok=True)
-    path = TOKENS / args.name
     with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
         f.write(res["token"] + "\n")
-    print(f"Enrolled {args.name}; token written to {path}")
+    print(f"Enrolled {args.name} on {machine}; token written to {path}")
 
 
 def cmd_ledger(args):
-    admin = get_admin_token()
+    admin = get_admin_token(admin_state_dir(args.state_dir))
     query = urllib.parse.urlencode({k: v for k, v in (("limit", args.limit), ("harness", args.harness_filter)) if v})
     res = api_call(f"/api/ledger?{query}", admin)
     if args.json:
@@ -277,8 +320,8 @@ def cmd_ledger(args):
     if res["first_bad_seq"] is not None:
         print(f"WARNING: ledger chain broken at seq {res['first_bad_seq']}")
     for r in res["rows"]:
-        who = f"{r['harness']}#{r['instance'] or 'default'}"
-        print(f"{r['seq']:>6}  {r['ts']}  {r['event']:<6} {who:<28} {(r.get('host') or ''):<10} msg={r['message_id'] or '-'}")
+        who = f"{r['harness']}@{r.get('machine') or '-'}#{r['instance'] or 'default'}"
+        print(f"{r['seq']:>6}  {r['ts']}  {r['event']:<6} {who:<34} {(r.get('subject') or ''):<36} msg={r['message_id'] or '-'}")
 
 
 # hooks
@@ -316,15 +359,10 @@ def hook_ack(c, me, ids):
 def cmd_hook(args):
     agent = args.agent.lower()
     hook_in = read_hook_stdin()
-    try:
-        if agent == "antigravity":
-            ws = hook_in.get("workspacePaths") or []
-            hook_in = dict(hook_in, cwd=ws[0]) if ws else hook_in
-        c = Caller(agent, hook_in)
-    except BusError:
-        # No token yet for this harness: stay silent rather than fail every prompt.
-        print(json.dumps({})) if agent == "antigravity" else None
-        return
+    if agent == "antigravity":
+        ws = hook_in.get("workspacePaths") or []
+        hook_in = dict(hook_in, cwd=ws[0]) if ws else hook_in
+    c = Caller(agent, hook_in)
     me = c.me
     if agent == "antigravity":
         # Antigravity's PreInvocation injection is reliable and fires per model call: ack on delivery.
@@ -354,6 +392,7 @@ def cmd_hook(args):
 def main():
     parser = argparse.ArgumentParser(prog="agent-bus", description="Inter-agent message bus CLI")
     parser.add_argument("--as", dest="harness", choices=HARNESSES, help="Speak as this harness (default: detected from the environment)")
+    parser.add_argument("--state-dir", help="The daemon's state directory, for the admin path (default: the system directory under root, else the development one)")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     p_send = subparsers.add_parser("send", help="Send a message")
@@ -398,6 +437,7 @@ def main():
 
     p_enroll = subparsers.add_parser("enroll", help="Mint a participant token with the admin token (once per harness per machine)")
     p_enroll.add_argument("name", choices=HARNESSES, help="Participant to enroll")
+    p_enroll.add_argument("--machine", help="The machine the token is for (default: this one)")
     p_enroll.set_defaults(func=cmd_enroll)
 
     p_ledger = subparsers.add_parser("ledger", help="The audit trail (admin token only)")
@@ -414,6 +454,10 @@ def main():
     try:
         args.func(args)
     except BusError as e:
+        if args.command == "hook":
+            # A hook must never turn a missing or unreadable token into a per-prompt error.
+            print(json.dumps({})) if args.agent == "antigravity" else None
+            return
         sys.exit(f"Error: {e}")
 
 

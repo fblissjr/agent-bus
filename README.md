@@ -55,42 +55,46 @@ this repo as a plugin in each harness. Everything needs `uv`.
 
 The daemon runs as a systemd system service under its own dynamic uid, so no
 agent on the host (they all run as you) can reach its store except through
-the API. Install it where that uid can run it, then link the unit:
+the API. The package is copied under `/opt/agent-bus`, where that uid can
+run it without reading into anyone's home:
 
 ```
-sudo UV_TOOL_DIR=/opt/agent-bus/tools UV_TOOL_BIN_DIR=/opt/agent-bus/bin uv tool install --editable "$(pwd)"
+sudo UV="$(command -v uv)" scripts/deploy-host.sh
 sudo systemctl enable --now "$(pwd)/systemd/agent-bus.service"
 ```
 
-State lives in `/var/lib/agent-bus/`: `store.db`, `ledger.jsonl`, `threads/`,
-`admin.token`, and the `PROTOCOL.md` the daemon serves. Copy the protocol
-in and the admin token out, the two one-time steps that need root:
+State lives in `/var/lib/agent-bus/`: `store.db`, `ledger.jsonl`,
+`threads/`, and `admin.token`. The admin token never leaves that directory:
+enrolling and auditing run under `sudo` and read it there. Re-run the deploy
+script on each release; it restarts the unit. Moving a running development
+daemon to the system unit is `docs/ops/cutover.md`.
 
-```
-sudo cp PROTOCOL.md /var/lib/agent-bus/
-sudo cat /var/lib/agent-bus/admin.token > "$AGENTS/admin.token" && chmod 600 "$AGENTS/admin.token"
-```
-
-Defaults are `src/agent_bus/daemon.py::DEFAULT_HOST` and `::DEFAULT_PORT`;
-add `--host` with a Tailscale address to `ExecStart` when another machine
-joins. For development, `agent-bus-daemon` in the foreground keeps its state
-under `$AGENTS` and needs no root.
+Defaults are `src/agent_bus/daemon.py::DEFAULT_HOST` and `::DEFAULT_PORT`.
+For development, `agent-bus-daemon` in the foreground keeps its state under
+`$AGENTS`, needs no root, and says loudly that it has no uid boundary.
 
 ## Client: enroll each harness
 
-Each harness on each machine holds one token, minted once with the admin
-token and stored at `$AGENTS/tokens/<harness>`:
+A participant is a harness on a machine and holds one token, minted on the
+host with the admin token. On the host, as the owner:
 
 ```
-agent-bus enroll claude
-agent-bus enroll antigravity
-agent-bus enroll owner        # you, at the terminal
+sudo /opt/agent-bus/bin/agent-bus enroll claude > "$AGENTS/tokens/claude" && chmod 600 "$AGENTS/tokens/claude"
+sudo /opt/agent-bus/bin/agent-bus enroll antigravity > "$AGENTS/tokens/antigravity" && chmod 600 "$AGENTS/tokens/antigravity"
+sudo /opt/agent-bus/bin/agent-bus enroll owner > "$AGENTS/tokens/owner" && chmod 600 "$AGENTS/tokens/owner"
 ```
+
+The token is printed by root and placed by you; nothing is written under
+root's home. For another machine, add `--machine <name>` and carry only that
+token there; the same harness on two machines holds two tokens, and enrolling
+one never revokes the other.
 
 Sessions never get tokens. The CLI and hooks derive the instance from the
 harness's own session id, and `agent-bus whoami` prints the resulting
 address. The plugin's hooks run the CLI with `uv run --no-project`, so a
-client needs `uv` and nothing installed; the CLI is stdlib-only.
+client needs `uv` and nothing installed; the CLI is stdlib-only. For your
+own day-to-day use of the CLI, `uv tool install --editable .` as yourself
+puts `agent-bus` on your PATH; the copy under `/opt` is for `sudo`.
 
 ### Claude Code
 
@@ -166,17 +170,19 @@ agent-bus inbox                                 # unread for whoami; add --ack t
 agent-bus ack 12 13
 agent-bus who                                   # instances active recently
 agent-bus show expander                         # a thread you are part of, (you) marked
-agent-bus show expander --audit                 # any thread, with the admin token
-agent-bus ledger                                # the audit trail, admin token only
-agent-bus enroll <harness>                      # once per harness per machine
+sudo /opt/agent-bus/bin/agent-bus show expander --repo r --audit   # any thread, with the admin token
+sudo /opt/agent-bus/bin/agent-bus ledger                           # the audit trail, admin token only
+sudo /opt/agent-bus/bin/agent-bus enroll <harness> [--machine m]   # once per harness per machine
 agent-bus hook --agent claude|antigravity       # what the hooks run
 ```
 
 The harness is detected from the environment (`CLAUDE_CODE_SESSION_ID`,
 `ANTIGRAVITY_CONVERSATION_ID`, `CODEX_SESSION_ID`, else `owner`) or set with
 `--as`. `--repo` and `--sha` default to the current checkout.
-`AGENT_BUS_URL` overrides the daemon URL; `AGENT_BUS_TOKEN_<HARNESS>` and
-`AGENT_BUS_ADMIN_TOKEN` override the token files.
+`AGENT_BUS_URL` overrides the daemon URL; `AGENT_BUS_TOKEN_<HARNESS>`
+overrides the token file. The admin path reads `admin.token` from the
+daemon's state directory (`--state-dir`, `AGENT_BUS_STATE_DIR`, else the
+system directory under root and `$AGENTS` for a development daemon).
 
 ## Layout
 
@@ -184,7 +190,9 @@ The harness is detected from the environment (`CLAUDE_CODE_SESSION_ID`,
 src/agent_bus/store.py         schema, identity, ledger, membership, projections
 src/agent_bus/daemon.py        MCP server, /api routes, token-to-participant auth
 src/agent_bus/cli.py           the agent-bus command, also what the hooks run
-systemd/agent-bus.service
+systemd/agent-bus.service      the system unit
+scripts/deploy-host.sh         the per-release root step
+docs/ops/cutover.md            moving a live host to the system unit
 .claude-plugin/                Claude Code plugin manifest and marketplace
 plugin.json, hooks.json        Antigravity plugin manifest and lifecycle hooks
 .mcp.json, hooks/, skills/     Claude plugin content

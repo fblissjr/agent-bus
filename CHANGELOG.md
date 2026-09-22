@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.0
+
+- Lockdown, code only. Participants are keyed by harness and machine, so
+  enrolling the same harness for a second machine revokes nothing; `enroll`
+  takes `--machine`. The ledger is version 2: `machine`, `subject`, and
+  `hash_version` columns, the version inside its own hashed field set, and
+  each row verified under the version it was written with; a 0.4 store
+  migrates in place and its rows keep verifying.
+- The admin path resolves the daemon's state directory itself
+  (`--state-dir`, `AGENT_BUS_STATE_DIR`, else the system directory under
+  root); `enroll` run as root prints the token and writes nothing; an
+  unreadable token file is silence in the hook; `show --audit` needs no
+  participant token.
+- `PROTOCOL.md` ships inside the package and is served from there. The store
+  file and the state directory are owner-only from creation. A development
+  daemon says loudly that it has no uid boundary.
+- `scripts/deploy-host.sh` (the per-release root step, a copied install
+  under `/opt/agent-bus`) and `docs/ops/cutover.md` (the one-time move from
+  the development unit to the system unit, with rollback).
+- README host and client sections describe that flow; the skill points at
+  the system unit.
+
 ## 0.4.2
 
 - Nothing autonomous, by the owner's decision: the skill and the protocol
