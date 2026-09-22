@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0
+
+- The repo is now a plugin. Claude Code: `.claude-plugin/plugin.json`, a
+  self-hosted marketplace (`.claude-plugin/marketplace.json`), `.mcp.json`
+  reading `AGENT_BUS_URL` and `AGENT_BUS_TOKEN` from the environment,
+  `hooks/hooks.json` (SessionStart and UserPromptSubmit through
+  `uv run --no-project`), and `skills/agent-bus/SKILL.md`.
+- The `hook` subcommand fails silent: no output and exit 0 when there is no
+  mail, when the daemon is unreachable, or when stdin is not hook JSON.
+- `tests/test_hook.py` brackets the hook against a stub server: speaks with
+  mail, silent without, silent when the daemon is down, clean on malformed
+  stdin, acks only what it printed.
+- README split into host setup (the daemon) and client setup (the plugin).
+
 ## 0.1.0
 
 - Daemon: four tools (`send`, `inbox`, `ack`, `who`) over MCP streamable

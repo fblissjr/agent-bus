@@ -14,8 +14,12 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-DEFAULT_SERVER = os.environ.get("AGENT_BUS_SERVER", "http://127.0.0.1:8765")
+DEFAULT_SERVER = os.environ.get("AGENT_BUS_SERVER") or os.environ.get("AGENT_BUS_URL") or "http://127.0.0.1:8765"
 TOKEN_PATH = Path.home() / ".agents" / "auth.token"
+
+
+class BusError(Exception):
+    """A request that could not be made or was refused. main() reports it; the hook swallows it."""
 
 
 def get_token():
@@ -24,7 +28,7 @@ def get_token():
         return env_token.strip()
     if TOKEN_PATH.exists():
         return TOKEN_PATH.read_text().strip()
-    sys.exit(f"Error: auth token not found at {TOKEN_PATH} and AGENT_BUS_TOKEN not set")
+    raise BusError(f"auth token not found at {TOKEN_PATH} and AGENT_BUS_TOKEN not set")
 
 
 def api_call(endpoint, method="GET", payload=None):
@@ -46,12 +50,12 @@ def api_call(endpoint, method="GET", payload=None):
     except urllib.error.HTTPError as e:
         err_msg = e.read().decode("utf-8", errors="replace")
         try:
-            err_json = json.loads(err_msg)
-            sys.exit(f"Error ({e.code}): {err_json.get('error', err_msg)}")
-        except Exception:
-            sys.exit(f"Error ({e.code}): {err_msg}")
+            err_msg = json.loads(err_msg).get("error", err_msg)
+        except ValueError:
+            pass
+        raise BusError(f"({e.code}) {err_msg}")
     except urllib.error.URLError as e:
-        sys.exit(f"Error connecting to agent-bus daemon at {DEFAULT_SERVER}: {e.reason}")
+        raise BusError(f"cannot reach agent-bus daemon at {DEFAULT_SERVER}: {e.reason}")
 
 
 def detect_repo():
@@ -189,49 +193,56 @@ def cmd_show(args):
                 print(format_envelope(m))
 
 
+def hook_notice(me):
+    """Unread mail for `me`, formatted for injection, or None. Any failure is None: a
+    hook runs on every prompt, and a down daemon must not become a per-prompt error.
+    Print before ack so a failed ack means a repeat next turn, never a lost message."""
+    try:
+        msgs = api_call("/api/inbox", method="POST", payload={"me": me})
+        if not msgs:
+            return None
+        formatted = "\n---\n".join(format_envelope(m) for m in msgs)
+        return f"[agent-bus] You have {len(msgs)} new message(s) on the bus:\n\n{formatted}", [m["id"] for m in msgs]
+    except (BusError, ValueError, KeyError, TypeError):
+        return None
+
+
+def hook_ack(me, ids):
+    try:
+        api_call("/api/ack", method="POST", payload={"me": me, "ids": ids})
+    except BusError:
+        pass
+
+
 def cmd_hook(args):
     agent = args.agent.lower()
     if agent == "antigravity":
-        # Parse PreInvocation input from stdin if available
+        # PreInvocation stdin carries workspacePaths; anything else falls back to cwd.
         repo = None
         try:
             if not sys.stdin.isatty():
-                stdin_data = sys.stdin.read()
-                if stdin_data.strip():
-                    hook_in = json.loads(stdin_data)
-                    ws_paths = hook_in.get("workspacePaths") or []
-                    if ws_paths:
-                        repo = Path(ws_paths[0]).name
-        except Exception:
+                hook_in = json.loads(sys.stdin.read() or "{}")
+                ws_paths = hook_in.get("workspacePaths") or []
+                if ws_paths:
+                    repo = Path(ws_paths[0]).name
+        except (ValueError, AttributeError, TypeError, OSError):
             pass
-
-        if not repo:
-            repo = detect_repo()
-
-        me = f"antigravity@{repo}"
-        msgs = api_call("/api/inbox", method="POST", payload={"me": me})
-        if msgs:
-            ids = [m["id"] for m in msgs]
-            api_call("/api/ack", method="POST", payload={"me": me, "ids": ids})
-            formatted = "\n---\n".join(format_envelope(m) for m in msgs)
-            notice = f"[agent-bus] You have {len(msgs)} new message(s) on the bus:\n\n{formatted}"
-            print(json.dumps({"injectSteps": [{"ephemeralMessage": notice}]}))
+        me = f"antigravity@{repo or detect_repo()}"
+        found = hook_notice(me)
+        if found:
+            print(json.dumps({"injectSteps": [{"ephemeralMessage": found[0]}]}))
+            hook_ack(me, found[1])
         else:
             print(json.dumps({}))
 
     elif agent == "claude":
-        repo = detect_repo()
-        me = f"claude@{repo}"
-        msgs = api_call("/api/inbox", method="POST", payload={"me": me})
-        if msgs:
-            ids = [m["id"] for m in msgs]
-            api_call("/api/ack", method="POST", payload={"me": me, "ids": ids})
-            formatted = "\n---\n".join(format_envelope(m) for m in msgs)
-            print(f"[agent-bus] You have {len(msgs)} new message(s) on the bus:\n\n{formatted}")
-        else:
-            pass
+        me = f"claude@{detect_repo()}"
+        found = hook_notice(me)
+        if found:
+            print(found[0])
+            hook_ack(me, found[1])
     else:
-        sys.exit(f"Unknown agent for hook: {agent}")
+        raise BusError(f"unknown agent for hook: {agent}")
 
 
 def main():
@@ -285,7 +296,10 @@ def main():
     p_hook.set_defaults(func=cmd_hook)
 
     args = parser.parse_args()
-    args.func(args)
+    try:
+        args.func(args)
+    except BusError as e:
+        sys.exit(f"Error: {e}")
 
 
 if __name__ == "__main__":

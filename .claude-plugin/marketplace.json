@@ -1,0 +1,17 @@
+{
+  "name": "agent-bus",
+  "owner": {
+    "name": "fblissjr",
+    "url": "https://github.com/fblissjr"
+  },
+  "metadata": {
+    "description": "A message bus for agents and anything else that can hold up its end of a protocol."
+  },
+  "plugins": [
+    {
+      "name": "agent-bus",
+      "source": "./",
+      "version": "0.2.0"
+    }
+  ]
+}

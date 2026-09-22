@@ -1,0 +1,43 @@
+{
+  "description": "agent-bus hooks: SessionStart and UserPromptSubmit run the inbox bridge, which prints unread bus messages addressed to claude@<repo> as plain text (Claude Code adds exit-0 stdout to context for both events) and acks them on delivery. Silent, exit 0, when there is no mail, when the daemon is unreachable, or when stdin is not what a hook sends, so a down daemon never turns into a per-prompt error. Exec form via uv so a client machine needs uv and nothing installed; the CLI is stdlib-only, hence --no-project. Timeout is in seconds and generous for a hook that gates nothing: a stall is visible, and there is no silent-bypass mode to protect against.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "timeout": 10,
+            "args": [
+              "run",
+              "--no-project",
+              "${CLAUDE_PLUGIN_ROOT}/src/agent_bus/cli.py",
+              "hook",
+              "--agent",
+              "claude"
+            ]
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "timeout": 10,
+            "args": [
+              "run",
+              "--no-project",
+              "${CLAUDE_PLUGIN_ROOT}/src/agent_bus/cli.py",
+              "hook",
+              "--agent",
+              "claude"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -2,6 +2,8 @@
   <img src="assets/agent-bus-banner.jpg" alt="Agent Bus Banner" width="100%">
 </p>
 
+last updated: 2026-09-22
+
 # agent-bus
 
 A message bus for agents, and for anything else that can hold up its end of
@@ -44,15 +46,19 @@ Runtime state lives in `.agents/` under the home directory: `store.db`,
 copy or symlink of `PROTOCOL.md` for the daemon to serve. The commands below
 call that directory `$AGENTS`.
 
-## Install
+There are two roles. One machine is the **host** and runs the daemon. Every
+machine that participates, including the host, is a **client** and installs
+this repo as a plugin in each harness. Everything needs `uv`.
 
-Requires `uv`. From a clone:
+## Host: run the daemon
+
+From a clone:
 
 ```
 uv tool install --editable .
 ```
 
-That puts `agent-bus` (the CLI) and `agent-bus-daemon` on your PATH. Run the
+That puts `agent-bus-daemon` and the `agent-bus` CLI on your PATH. Run the
 daemon once in the foreground to generate the token and check it starts:
 
 ```
@@ -75,49 +81,56 @@ this repo's copy:
 ln -sf "$(pwd)/PROTOCOL.md" "$AGENTS/PROTOCOL.md"
 ```
 
-## Connect a participant
+## Client: install the plugin
 
-Every client needs the URL and the bearer token from `$AGENTS/auth.token`.
-Copy the token to any other machine that connects.
+Every client needs two environment variables in the shell that starts the
+harness. Copy the token from the host's `$AGENTS/auth.token`; the URL is only
+needed when the daemon is not on this machine.
+
+```
+export AGENT_BUS_TOKEN=...
+export AGENT_BUS_URL=http://<host>:8765     # omit on the host itself
+```
+
+The plugin's hooks run the CLI with `uv run --no-project`, so a client needs
+`uv` and nothing installed; the CLI is stdlib-only.
 
 ### Claude Code
 
-```
-claude mcp add --scope user --transport http agent-bus http://127.0.0.1:8765/mcp \
-  -H "Authorization: Bearer $(cat "$AGENTS/auth.token")"
-```
+This repo is its own marketplace:
 
-Hooks, in `settings.json` under the user's Claude config directory. The
-`hook` subcommand prints unread messages as plain text, which Claude Code
-adds to context for both events, and acks them:
-
-```json
-"hooks": {
-  "SessionStart":     [{"hooks": [{"type": "command", "command": "agent-bus hook --agent claude"}]}],
-  "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "agent-bus hook --agent claude"}]}]
-}
+```
+claude plugin marketplace add fblissjr/agent-bus
+claude plugin install agent-bus@agent-bus
 ```
 
-Add `Bash(agent-bus:*)` to `permissions.allow` so the agent can send without
-a prompt each time.
+That connects the `agent-bus` MCP server (no approval step for plugin
+servers), adds the `agent-bus` skill, and registers `SessionStart` and
+`UserPromptSubmit` hooks that print unread mail addressed to `claude@<repo>`
+as plain text and ack it. The hooks are silent when there is nothing, so
+they cost nothing per turn. If you had added the server or hooks by hand
+before, remove them; the plugin replaces both.
+
+Add `Bash(agent-bus:*)` to `permissions.allow` if you also want the agent
+to use the CLI without a prompt.
 
 ### Antigravity
 
-Antigravity's MCP config takes a `serverUrl` and cannot set headers, so it
-connects over SSE with the token as a query parameter (the daemon redacts it
-from its access log):
+Antigravity reads plugins from `.agents/plugins/` in a workspace or from its
+global plugin directory, with `plugin.json`, `mcp_config.json`, `hooks.json`,
+and `skills/` at the plugin root. This repo carries those files so
+`agy plugin install <clone>` works. The hook is `PreInvocation`; it reads
+`workspacePaths` from stdin to derive the repo name.
 
-```json
-{"mcpServers": {"agent-bus": {"serverUrl": "http://127.0.0.1:8765/sse?token=<token>"}}}
-```
+Until the plugin files land, the manual form is a `serverUrl` entry in
+`mcp_config.json` and a `PreInvocation` entry in `hooks.json` running
+`agent-bus hook --agent antigravity`.
 
-Hook, in Antigravity's `hooks.json`:
+### Codex
 
-```json
-{"agent-bus": {"PreInvocation": [{"type": "command", "command": "agent-bus hook --agent antigravity"}]}}
-```
-
-The hook reads `workspacePaths` from stdin to derive the repo name.
+Planned. Codex reads `.codex-plugin/plugin.json` and a plugin-root
+`.mcp.json`, and `codex mcp add --url ... --bearer-token-env-var
+AGENT_BUS_TOKEN` is the manual form today.
 
 ### Anything else
 
@@ -145,12 +158,18 @@ the URL and token.
 ## Layout
 
 ```
-src/agent_bus/store.py    schema, address matching, projection
-src/agent_bus/daemon.py   MCP server, /api routes, bearer auth
-src/agent_bus/cli.py      the agent-bus command
+src/agent_bus/store.py         schema, address matching, projection
+src/agent_bus/daemon.py        MCP server, /api routes, bearer auth
+src/agent_bus/cli.py           the agent-bus command, also what the hooks run
 systemd/agent-bus.service
-PROTOCOL.md               the spec
+.claude-plugin/                Claude Code plugin manifest and marketplace
+.mcp.json, hooks/, skills/     plugin content shared across harnesses
+tests/test_hook.py             brackets the hook against a stub server
+PROTOCOL.md                    the spec
+VISION.md                      where it goes and what it will not become
 ```
+
+Run the tests with `uv run --group dev pytest`.
 
 ## Spec alignment
 

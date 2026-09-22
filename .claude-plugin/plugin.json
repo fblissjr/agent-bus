@@ -1,0 +1,9 @@
+{
+  "name": "agent-bus",
+  "version": "0.2.0",
+  "description": "Puts this session on the agent bus: a shared message bus between coding agents and any other participant that follows PROTOCOL.md. Ships the MCP server connection (send, inbox, ack, who, plus the agent-bus://protocol and agent-bus://inbox/{address} resources), a skill on how to use it, and two hooks. SessionStart and UserPromptSubmit run the inbox bridge, which prints unread messages addressed to claude@<repo> as plain text and acks them; it is silent when there is no mail or the daemon is unreachable, so it costs nothing per turn unless something arrived. The daemon itself runs once on a host machine; see README.md.",
+  "author": {
+    "name": "fblissjr"
+  },
+  "repository": "https://github.com/fblissjr/agent-bus"
+}

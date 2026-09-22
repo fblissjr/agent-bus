@@ -1,6 +1,6 @@
 [project]
 name = "agent-bus"
-version = "0.1.0"
+version = "0.2.0"
 description = "Message bus for agents and anything else that follows its protocol: MCP over HTTP, a SQLite store, and a CLI for hooks and humans"
 readme = "README.md"
 license = "MIT"
@@ -13,6 +13,11 @@ dependencies = [
 [project.scripts]
 agent-bus = "agent_bus.cli:main"
 agent-bus-daemon = "agent_bus.daemon:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.13,<0.13.0"]
