@@ -36,7 +36,7 @@ def detect_harness():
         return os.environ["AGENT_BUS_HARNESS"]
     if os.environ.get("CLAUDE_CODE_SESSION_ID"):
         return "claude"
-    if os.environ.get("ANTIGRAVITY_CONVERSATION_ID"):
+    if os.environ.get("ANTIGRAVITY_AGENT") or os.environ.get("ANTIGRAVITY_TRAJECTORY_ID") or os.environ.get("ANTIGRAVITY_CONVERSATION_ID"):
         return "antigravity"
     if os.environ.get("CODEX_SESSION_ID"):
         return "codex"
@@ -50,7 +50,7 @@ def detect_instance(harness, hook_in=None):
         raw = hook_in.get("session_id") or hook_in.get("conversationId")
     raw = raw or os.environ.get("AGENT_BUS_INSTANCE") or {
         "claude": os.environ.get("CLAUDE_CODE_SESSION_ID"),
-        "antigravity": os.environ.get("ANTIGRAVITY_CONVERSATION_ID"),
+        "antigravity": os.environ.get("ANTIGRAVITY_TRAJECTORY_ID") or os.environ.get("ANTIGRAVITY_CONVERSATION_ID"),
         "codex": os.environ.get("CODEX_SESSION_ID"),
     }.get(harness)
     return raw[:8] if raw else None
