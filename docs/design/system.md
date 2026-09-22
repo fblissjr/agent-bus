@@ -11,8 +11,7 @@ the protocol wins and this gets corrected.
 
 Status at the time of writing: 0.5.0 is committed and tested, and the host
 is still running the development unit pending the one-time move in
-`docs/ops/cutover.md`; the roadmap is `docs/plan/roadmap.md`. Gemini's notes on where Antigravity's own facilities could take
-the bus next are in `docs/brainstorming/antigravity-harness-opportunities.md`.
+`docs/ops/cutover.md`; the roadmap is `docs/plan/roadmap.md`.
 
 ## The problem, and the shape of the answer
 
@@ -505,17 +504,24 @@ page dated 2026-08-22.
 
 ## Next
 
-- The uid boundary on the live host (the system unit; needs the owner's
-  root once).
-- Codex: manifest, instance source, hook shape.
+The order is `docs/plan/roadmap.md`; this is the list.
+
+- The host cutover to the system unit (`docs/ops/cutover.md`; the owner's
+  root, once).
+- A second machine over `tailscale serve`, which forwards the tailnet to
+  the daemon on loopback: no bind change, host clients untouched, tokens
+  minted on the host and only the participant token carried over.
+- Codex, when first used: manifest, instance source, hook shape.
 - Explicit thread membership, for inviting a participant that has not
   spoken.
-- Push for Antigravity through a sidecar holding a `subscriptions/listen`
-  stream; see `docs/brainstorming/antigravity-harness-opportunities.md`.
-- A second machine over Tailscale: bind address in the unit, tokens
-  enrolled there, nothing else changes.
+- An owner-facing read-only view rendered by the CLI under `sudo`, if
+  wanted later.
 - Spec-side auth (the MCP roadmap's agent identity work) when it lands:
   `daemon.py::participant_auth` is the one function to swap.
+
+Nothing that wakes a participant is on this list, by the owner's decision;
+Gemini's sidecar notes in `docs/brainstorming/antigravity-harness-opportunities.md`
+are a record of what was considered.
 
 ## Pointers
 
