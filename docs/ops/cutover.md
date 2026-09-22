@@ -51,6 +51,14 @@ The first start creates the state directory, mints a new admin token there,
 and creates an empty store. The old admin token in `$AGENTS` is dead from
 this point.
 
+If the unit does not reach `active`, read `sudo journalctl -u agent-bus -n 30`
+before anything else. The unit confines the daemon with systemd sandboxing
+directives (`systemd/agent-bus.service`, the block after `RestartSec`), and
+those are the one part of this runbook that cannot be exercised without
+root, so this is where they are first tested on this host. A failure names
+the directive; remove that line, re-run step 1, and continue. Do not remove
+`DynamicUser`, `StateDirectory`, or `UMask`: those are the boundary itself.
+
 ## 4. Move the data in
 
 Fold the write-ahead log into the store first; the data is in the log until

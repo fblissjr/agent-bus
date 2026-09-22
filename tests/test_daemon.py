@@ -80,7 +80,7 @@ def test_no_token_and_admin_cannot_speak(bus):
 
 def test_sender_is_derived_from_token_and_metadata(bus):
     claude = bus.enroll("claude")
-    code, msg = bus.call("POST", "/api/send", claude, {"from": "antigravity@r#spoof", "to": "antigravity@r", "repo": "r", "status": "REQUEST", "verb": "review", "body": "hi", "thread": "t"}, instance="a6419e08", host="vojo", pid=4242, cwd="/x/y/my-repo")
+    code, msg = bus.call("POST", "/api/send", claude, {"from": "antigravity@r#spoof", "to": "antigravity@r", "repo": "r", "status": "REQUEST", "verb": "review", "body": "hi", "thread": "t"}, instance="a6419e08", host="host1", pid=4242, cwd="/x/y/my-repo")
     assert code == 200
     assert msg["from"] == "claude@my-repo#a6419e08"
     code, me = bus.call("GET", "/api/whoami?repo=r", claude, instance="a6419e08", cwd="/x/y/my-repo")
@@ -169,7 +169,7 @@ def test_ledger_v2_verifies_over_a_v1_store(tmp_path):
     db.execute("INSERT INTO participants VALUES ('claude', ?, '2026-09-22T17:22:11Z')", (token_hash("old-claude-token"),))
     prev = GENESIS
     for seq in (1, 2):
-        row = {"seq": seq, "ts": "2026-09-22T17:22:11Z", "event": "enroll", "harness": "admin", "instance": None, "host": "vojo", "pid": None, "cwd": None, "peer": "127.0.0.1", "message_id": None, "body_hash": None, "prev_hash": prev}
+        row = {"seq": seq, "ts": "2026-09-22T17:22:11Z", "event": "enroll", "harness": "admin", "instance": None, "host": "host1", "pid": None, "cwd": None, "peer": "127.0.0.1", "message_id": None, "body_hash": None, "prev_hash": prev}
         row["hash"] = ledger_hash(row)
         db.execute("INSERT INTO ledger VALUES (:seq, :ts, :event, :harness, :instance, :host, :pid, :cwd, :peer, :message_id, :body_hash, :prev_hash, :hash)", row)
         prev = row["hash"]
@@ -178,7 +178,7 @@ def test_ledger_v2_verifies_over_a_v1_store(tmp_path):
     store = Store(tmp_path)
     assert store.verify("old-claude-token") == ("claude", socket.gethostname())
     assert store.verify_ledger() is None
-    store.enroll("antigravity", "vojo", Identity("admin"))
+    store.enroll("antigravity", "host1", Identity("admin"))
     assert store.verify_ledger() is None
     versions = [r["hash_version"] for r in store.ledger()]
     assert versions == [1, 1, 2]
