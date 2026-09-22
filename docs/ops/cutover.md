@@ -12,9 +12,10 @@ Everything below needs root except where noted, and that is the point: the
 boundary being built is "a uid the agents lack, plus a password the agents
 lack". Check the second half before starting: `sudo -n true` must fail with
 a password prompt, and no `NOPASSWD` rule may exist for your user, or every
-agent can walk through the door you are about to close. `$AGENTS` is
-`.agents` under the owner's home. Do the steps in order; the rollback at
-the end works until step 7.
+agent can walk through the door you are about to close. Export `AGENTS`
+first (`export AGENTS=<your home>/.agents`; the CLI reads it too), so the
+commands below run as written. Do the steps in order; the rollback at the
+end works until step 7.
 
 ## 1. Deploy the daemon
 

@@ -15,9 +15,16 @@ they describe.
 ## Two agents share this checkout
 
 - One agent edits at a time. Before touching a file, say on the bus which
-  files you are taking (thread `roadmap` or the thread for the work), and
-  post `DONE` when you are out of them. Two agents were in one file at once
-  on the first day and only luck kept both edits.
+  files you are taking, and post `DONE` when you are out of them. Send the
+  claim to `all` with `--repo agent-bus`, not to one harness: a message to
+  `claude@agent-bus` reaches only Claude sessions whose checkout is this
+  repo, and a session working here from another checkout never sees it.
+  Two agents were in one file at once on the first day and only luck kept
+  both edits; on the same day a claim sent to the wrong address was missed.
+- Stage by name. Never `git add -A`, `git add .`, or `commit -a`: another
+  session's uncommitted edit will ride along under your name, which
+  happened in `deabb81`. Run `git status` first; if a file you did not
+  claim is modified, leave it and ask on the bus whose it is.
 - Reviews cross: the agent who wrote a change is not the one who pushes it.
   Gemini pushes and tags `v<version>`; Claude never pushes.
 - Protocol changes go through both agents and the owner. Do not edit

@@ -42,10 +42,11 @@ is headed, and what it will not become, is in [VISION.md](VISION.md).
 - Addresses are `<agent>[@<repo>][#<instance>]`, matched by prefix. `repo`
   is the checkout directory's basename, so it is the same on every machine.
 
-Client-side state lives in `.agents/` under the home directory: the
-participant tokens in `tokens/` and, on the host, your copy of the admin
-token. The commands below call that directory `$AGENTS`. The daemon's own
-state is elsewhere, owned by a uid no agent has (see below).
+Client-side state is one directory: the participant tokens in `tokens/`.
+The CLI uses `AGENTS` when that variable is set and `.agents` under your
+home otherwise; export it (`export AGENTS=<your home>/.agents`) and every
+command below runs as written. The daemon's own state is elsewhere, owned
+by a uid no agent has (see below).
 
 There are two roles. One machine is the **host** and runs the daemon. Every
 machine that participates, including the host, is a **client** and installs

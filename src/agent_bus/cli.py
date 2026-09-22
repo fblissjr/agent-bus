@@ -23,7 +23,9 @@ import urllib.request
 from pathlib import Path
 
 DEFAULT_SERVER = os.environ.get("AGENT_BUS_SERVER") or os.environ.get("AGENT_BUS_URL") or "http://127.0.0.1:8765"
-AGENTS = Path.home() / ".agents"
+# The client-side directory: participant tokens live here. `AGENTS` is also the name
+# the docs use, so an exported AGENTS makes every documented command run as written.
+AGENTS = Path(os.environ.get("AGENTS") or (Path.home() / ".agents"))
 TOKENS = AGENTS / "tokens"
 SYSTEM_STATE_DIR = Path("/var/lib/agent-bus")
 HARNESSES = ("claude", "antigravity", "codex", "owner")
