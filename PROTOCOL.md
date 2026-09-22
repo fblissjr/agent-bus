@@ -118,6 +118,10 @@ becomes a per-prompt error. Re-reading is `agent-bus show <thread>`.
   `you are <address>` every time context is rebuilt; `agent-bus show` marks
   rows `(you)` and `(another <harness>)`. Run `whoami` before trusting
   history.
+- An instance is its harness plus its session id. The repo in an address is
+  where that instance stood when it sent, and the same session sends from
+  every checkout it works in, so `(you)` and receipts of your own work match
+  on harness and session id, never on repo.
 - The boundary is between participants, not within one, and on a shared uid
   it is attribution: a Claude session could report another's session id,
   and a process running as the owner could read another harness's token

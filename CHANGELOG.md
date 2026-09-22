@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2
+
+- `(you)` and `(another <harness>)` match on harness and session id, not on
+  the whole address: a message this session sent from another checkout is
+  still yours. The protocol says an instance is its harness plus session id
+  and the repo in an address is only where it stood.
+
 ## 0.5.1
 
 - `agent-bus register` renders the owner's audit page (every message,

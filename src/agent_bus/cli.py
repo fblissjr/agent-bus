@@ -183,12 +183,21 @@ class Caller:
         return api_call(endpoint, self.token, method, payload, self.instance)
 
 
+def identity_of(addr):
+    """(harness, instance) of an address. The repo half is where the instance stood when
+    it sent, not who it is: the same session sends from every checkout it works in."""
+    harness = addr.split("@")[0].split("#")[0]
+    instance = addr.split("#")[1] if "#" in addr else None
+    return harness, instance
+
+
 def format_envelope(msg, me=None):
     head = f"## {msg['id']} | {msg['from']} -> {msg['to']} | {msg['ts']} | {msg['status']}"
     if msg.get("verb"):
         head += f" {msg['verb']}"
     if me:
-        head += "  (you)" if msg["from"] == me else (f"  (another {me.split('@')[0]})" if msg["from"].split("@")[0] == me.split("@")[0] else "")
+        mine, theirs = identity_of(me), identity_of(msg["from"])
+        head += "  (you)" if theirs == mine else (f"  (another {mine[0]})" if theirs[0] == mine[0] else "")
     lines = [head, f"repo: {msg['repo']}" + (f" @ {msg['sha']}" if msg.get("sha") else "")]
     if msg.get("files"):
         lines.append("files: " + ", ".join(msg["files"]))

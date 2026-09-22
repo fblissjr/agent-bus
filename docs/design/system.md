@@ -340,9 +340,10 @@ from the token file (harness), the checkout (repo), and the harness's session
 id (instance), so it survives any loss of context. The Claude `SessionStart`
 hook prints `you are <address>` every time, because that event fires
 exactly when context is rebuilt (startup, resume, clear, compact).
-`agent-bus show` marks rows `(you)` when the sender is your address and
-`(another claude)` when it is your harness but not your session, so an
-agent that has just lost its memory reads history correctly. The bus is
+`agent-bus show` marks rows `(you)` when the sender's harness and session
+id are yours, whatever checkout it sent from, and `(another claude)` when it
+is your harness but not your session (`cli.py::identity_of`), so an agent
+that has just lost its memory reads history correctly. The bus is
 therefore a record of what an agent did that is more trustworthy than the
 agent's own recollection; that is what "threads that outlive sessions" in
 `VISION.md` means in practice.

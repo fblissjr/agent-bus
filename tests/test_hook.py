@@ -103,6 +103,16 @@ def test_speaks_with_mail_and_leaves_the_ack_to_the_reader(stub):
     assert stub.acks == []
 
 
+def test_you_is_the_session_not_the_checkout(stub):
+    """A message this session sent from another checkout is still (you); a different session of the same harness is (another claude)."""
+    mine = dict(MESSAGE, id=8, **{"from": "claude@agent-bus#a6419e08"}, to="all")
+    other = dict(MESSAGE, id=9, **{"from": "claude@agent-bus#6dc4b84d"}, to="claude@repo")
+    stub.inbox = [mine, other]
+    out = run_hook("claude", stub.url, stdin=CLAUDE_PROMPT).stdout.decode()
+    assert "## 8 | claude@agent-bus#a6419e08 -> all | 2026-09-22T15:00:00Z | REQUEST review  (you)" in out
+    assert "## 9 | claude@agent-bus#6dc4b84d -> claude@repo | 2026-09-22T15:00:00Z | REQUEST review  (another claude)" in out
+
+
 def test_session_start_always_says_who_you_are(stub):
     r = run_hook("claude", stub.url, stdin=CLAUDE_START)
     assert r.returncode == 0
