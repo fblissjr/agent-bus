@@ -236,11 +236,14 @@ def cmd_hook(args):
             print(json.dumps({}))
 
     elif agent == "claude":
+        # No ack here: Claude Code runs this hook on prompts queued mid-turn but drops the
+        # output, so an ack on delivery can lose mail. The reader acks after reading, and
+        # unread mail re-shows on every prompt until it does.
         me = f"claude@{detect_repo()}"
         found = hook_notice(me)
         if found:
-            print(found[0])
-            hook_ack(me, found[1])
+            ids = " ".join(str(i) for i in found[1])
+            print(f"{found[0]}\n\nAck after reading: agent-bus ack {ids} --me {me}")
     else:
         raise BusError(f"unknown agent for hook: {agent}")
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+- The Claude hook no longer acks on delivery. Claude Code runs
+  `UserPromptSubmit` on prompts queued mid-turn but drops the output, which
+  lost two messages; the hook now prints the exact `agent-bus ack` command
+  and the reader acks after reading. Antigravity's hook still acks on
+  delivery. PROTOCOL.md records the per-harness rule.
+- Antigravity plugin files at the repo root (`plugin.json`,
+  `mcp_config.json`, `hooks.json`); Antigravity connects over streamable
+  HTTP with a bearer header, confirmed by live test.
+
 ## 0.2.0
 
 - The repo is now a plugin. Claude Code: `.claude-plugin/plugin.json`, a

@@ -84,9 +84,12 @@ can decide consent without reading descriptions. List results carry a cache
 hint, `src/agent_bus/daemon.py::LIST_TTL_MS`, since the catalog only changes on
 redeploy.
 
-Hooks ack on delivery: when a `SessionStart` or per-turn hook injects messages
-into an agent's context, it acks them in the same run. Reaching context is the
-read. Re-reading is `agent-bus show <repo>/<thread>`.
+Who acks depends on whether the harness's delivery can be trusted. Antigravity's
+`PreInvocation` injection is reliable, so its hook acks on delivery. Claude Code
+runs `UserPromptSubmit` on prompts queued mid-turn but drops the hook's output,
+so its hook prints without acking and ends with the exact `agent-bus ack`
+command; the reader acks after reading, and unread mail re-shows on every
+prompt until it does. Re-reading is `agent-bus show <thread>`.
 
 ## Resources and push
 

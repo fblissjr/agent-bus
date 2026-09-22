@@ -85,14 +85,22 @@ def run_hook(agent, url, token=TOKEN, stdin=b"", runner=None, home=None):
     return subprocess.run(cmd, input=stdin, capture_output=True, env=env, timeout=30)
 
 
-def test_speaks_with_mail_and_acks_what_it_printed(stub):
+def test_speaks_with_mail_and_leaves_the_ack_to_the_reader(stub):
     stub.inbox = [MESSAGE]
     r = run_hook("claude", stub.url)
     assert r.returncode == 0
     out = r.stdout.decode()
     assert re.match(r"\[agent-bus\] You have 1 new message", out)
     assert "## 7 | antigravity@repo -> claude@repo" in out and "Please look at x." in out
-    assert len(stub.acks) == 1 and stub.acks[0]["ids"] == [7] and stub.acks[0]["me"].startswith("claude@")
+    assert re.search(r"Ack after reading: agent-bus ack 7 --me claude@\S+", out)
+    assert stub.acks == []
+
+
+def test_antigravity_acks_on_delivery(stub):
+    stub.inbox = [MESSAGE]
+    r = run_hook("antigravity", stub.url, stdin=json.dumps({"workspacePaths": ["/tmp/some-repo"]}).encode())
+    assert r.returncode == 0
+    assert stub.acks == [{"me": "antigravity@some-repo", "ids": [7]}]
 
 
 def test_silent_without_mail(stub):
