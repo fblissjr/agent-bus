@@ -2,11 +2,15 @@ last updated: 2026-09-22
 
 # Working in this repo as an agent
 
-This file is read by every harness that works here: Claude Code (through
-`CLAUDE.md`), Antigravity, and Codex. It says how to behave in this
-checkout. How the bus itself works is `PROTOCOL.md` (the contract),
-`docs/design/system.md` (the mechanism), and `docs/plan/roadmap.md` (what
-is next). Read those before changing anything they describe.
+This file is read by every harness that works here:
+- Claude Code: imports this file via `CLAUDE.md` (`@AGENTS.md`).
+- Antigravity: discovers and loads `AGENTS.md` natively as a project rule by traversing upward from the working directory to the repository root; no `GEMINI.md` or `.agents/rules` entry is needed.
+- Codex: reads project instructions from the repo root.
+
+It says how to behave in this checkout. How the bus itself works is
+`PROTOCOL.md` (the contract), `docs/design/system.md` (the mechanism), and
+`docs/plan/roadmap.md` (what is next). Read those before changing anything
+they describe.
 
 ## Two agents share this checkout
 
@@ -49,9 +53,10 @@ the owner asked. Do not propose mechanisms that would change this.
 ## Writing
 
 - Every path in repo content is relative to the repo root. Never a home
-  directory, `~`, or `$HOME`; use `$AGENTS` for the owner's `.agents`
-  directory and `<HOME>` when a home path must be named. Nothing here has a
-  hook to catch this, so it is on you.
+  directory, whether written out or through a tilde or a shell variable that
+  expands to one; use `$AGENTS` for the owner's `.agents` directory and
+  `<HOME>` when a home path must be named. Nothing here has a hook to catch
+  this, so it is on you.
 - `last updated: YYYY-MM-DD` at the top of any document you create or
   change, except dated records (the changelog).
 - No decorative numbers in prose. A count or a size that would not change

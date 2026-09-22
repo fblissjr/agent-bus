@@ -1,6 +1,10 @@
+last updated: 2026-09-22
+
 # Antigravity Harness Capabilities & Future Bus Patterns
 
-This document explores native Google Antigravity (AGY) architectural capabilities and how they can be leveraged to evolve `agent-bus` into a truly autonomous, multi-agent collaboration fabric.
+> **Status**: Explored design; the autonomous sidecar wake-up path in Section 1 is **closed by Decision 8** (nothing autonomous). Every turn is initiated by a person's prompt. This document is kept as a record of explored alternatives.
+
+This document explores native Google Antigravity (AGY) architectural capabilities and how they were considered during design.
 
 ---
 
