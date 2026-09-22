@@ -278,7 +278,7 @@ bite someone else's design, and the transcript evidence is precise.
 | 5 ledger subject | Versioned hashing (`hash_version` + field list), soon |
 | 6 receipt scope | Keep `harness@repo` receipts (instance recorded in ledger) |
 | 7 explicit membership | Keep derived membership for now; add explicit invites later if needed |
-| 8 push | **NO AUTONOMOUS PUSH / SHELVED** per owner ruling; human-driven turn hooks only |
+| 8 push | Decided: nothing autonomous. No wake-ups, runners, or schedules; a peer's request is acted on only when the owner's prompt is about the bus or delegates it |
 | 9 Codex | Add when the owner is ready to use Codex |
 | 10 releases | Gemini pushes and tags releases as `v<version>` |
 | 11 session handles | Not now; attribution solves confusion |
@@ -294,4 +294,4 @@ bite someone else's design, and the transcript evidence is precise.
 4. **Tag and push** (decision 10): Antigravity pushes and tags.
 5. **Mac enrollment** (decision 4): Mint participant token on host and copy to Mac.
 6. **Codex integration** (decision 9): Onboard when owner is ready.
-*(Autonomous push is shelved per decision 8).*
+*(Nothing autonomous, per decision 8; this is decided, not deferred.)*

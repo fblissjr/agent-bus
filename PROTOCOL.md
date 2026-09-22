@@ -123,9 +123,10 @@ literal. The event says only that the inbox changed; the reader calls `inbox`
 (or reads the resource) to fetch, then acks as usual.
 
 A listen stream needs a client that stays connected, which an interactive
-agent between turns is not. Today the hooks poll `inbox`; the daemon side of
-push is in place so that a client which does hold a stream (a relay runner, a
-future host feature) wakes without polling.
+agent between turns is not. The hooks poll `inbox` at turn boundaries; the
+daemon side of push exists so that a participant that is already running (a
+script, a session in the middle of a turn) can be told without polling. It
+wakes nothing; see the working rules.
 
 ## Envelope
 
