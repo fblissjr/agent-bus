@@ -18,21 +18,23 @@ import pytest
 
 CLI = Path(__file__).resolve().parents[1] / "src" / "agent_bus" / "cli.py"
 TOKEN = "test-token"
-MESSAGE = {"id": 7, "ts": "2026-09-22T15:00:00Z", "from": "antigravity@repo", "to": "claude@repo", "repo": "repo", "thread": "t", "status": "REQUEST", "verb": "review", "sha": "abc1234", "files": ["src/x.py"], "body": "Please look at x."}
+MESSAGE = {"id": 7, "ts": "2026-09-22T15:00:00Z", "from": "antigravity@repo#b2d1b325", "to": "claude@repo", "repo": "repo", "thread": "t", "status": "REQUEST", "verb": "review", "sha": "abc1234", "files": ["src/x.py"], "body": "Please look at x."}
 
 
 class Stub:
-    """Answers /api/inbox with `inbox` and records every /api/ack body."""
+    """Answers /api/inbox with `inbox`, records every /api/ack body and the identity headers seen."""
 
     def __init__(self):
         self.inbox = []
         self.acks = []
+        self.headers = []
         stub = self
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(length) or b"{}")
+                stub.headers.append({k: v for k, v in self.headers.items() if k.startswith("X-Bus-")})
                 if self.headers.get("Authorization") != f"Bearer {TOKEN}":
                     return self.reply(401, {"error": "bad token"})
                 if self.path == "/api/inbox":
@@ -50,7 +52,7 @@ class Stub:
                 self.end_headers()
                 self.wfile.write(data)
 
-            def log_message(self, *args):
+            def log_message(self, format, *args):
                 pass
 
         self.server = HTTPServer(("127.0.0.1", 0), Handler)
@@ -74,66 +76,83 @@ def free_port():
         return s.getsockname()[1]
 
 
-def run_hook(agent, url, token=TOKEN, stdin=b"", runner=None, home=None):
+def run_hook(agent, url, token=TOKEN, stdin=b"", runner=None, home=None, env_extra=None):
     cmd = (runner or [sys.executable]) + [str(CLI), "hook", "--agent", agent]
-    env = {k: v for k, v in os.environ.items() if not k.startswith("AGENT_BUS_")}
+    env = {k: v for k, v in os.environ.items() if not (k.startswith("AGENT_BUS_") or k.startswith("CLAUDE_"))}
     env["AGENT_BUS_SERVER"] = url
     if token is not None:
-        env["AGENT_BUS_TOKEN"] = token
+        env[f"AGENT_BUS_TOKEN_{agent.upper()}"] = token
     if home is not None:
         env["HOME"] = str(home)
+    env.update(env_extra or {})
     return subprocess.run(cmd, input=stdin, capture_output=True, env=env, timeout=30)
+
+
+CLAUDE_PROMPT = json.dumps({"hook_event_name": "UserPromptSubmit", "session_id": "a6419e08-73f1-4550-9447-f615cd4c8ed9", "cwd": "/x/y/repo"}).encode()
+CLAUDE_START = json.dumps({"hook_event_name": "SessionStart", "session_id": "a6419e08-73f1-4550-9447-f615cd4c8ed9", "cwd": "/x/y/repo"}).encode()
 
 
 def test_speaks_with_mail_and_leaves_the_ack_to_the_reader(stub):
     stub.inbox = [MESSAGE]
-    r = run_hook("claude", stub.url)
+    r = run_hook("claude", stub.url, stdin=CLAUDE_PROMPT)
     assert r.returncode == 0
     out = r.stdout.decode()
     assert re.match(r"\[agent-bus\] You have 1 new message", out)
-    assert "## 7 | antigravity@repo -> claude@repo" in out and "Please look at x." in out
-    assert re.search(r"Ack after reading: agent-bus ack 7 --me claude@\S+", out)
+    assert "## 7 | antigravity@repo#b2d1b325 -> claude@repo" in out and "Please look at x." in out
+    assert "Ack after reading: agent-bus ack 7 --me claude@repo#a6419e08" in out
     assert stub.acks == []
 
 
-def test_antigravity_acks_on_delivery(stub):
-    stub.inbox = [MESSAGE]
-    r = run_hook("antigravity", stub.url, stdin=json.dumps({"workspacePaths": ["/tmp/some-repo"]}).encode())
+def test_session_start_always_says_who_you_are(stub):
+    r = run_hook("claude", stub.url, stdin=CLAUDE_START)
     assert r.returncode == 0
-    assert stub.acks == [{"me": "antigravity@some-repo", "ids": [7]}]
+    assert r.stdout.decode().strip() == "[agent-bus] you are claude@repo#a6419e08"
+
+
+def test_identity_headers_come_from_the_session(stub):
+    run_hook("claude", stub.url, stdin=CLAUDE_PROMPT)
+    assert stub.headers and stub.headers[0]["X-Bus-Instance"] == "a6419e08"
+    assert stub.headers[0]["X-Bus-Host"] and stub.headers[0]["X-Bus-Cwd"]
 
 
 def test_silent_without_mail(stub):
-    r = run_hook("claude", stub.url)
+    r = run_hook("claude", stub.url, stdin=CLAUDE_PROMPT)
     assert r.returncode == 0 and r.stdout == b"" and r.stderr == b""
     assert stub.acks == []
 
 
 def test_silent_when_daemon_is_down():
-    r = run_hook("claude", f"http://127.0.0.1:{free_port()}")
+    r = run_hook("claude", f"http://127.0.0.1:{free_port()}", stdin=CLAUDE_PROMPT)
     assert r.returncode == 0 and r.stdout == b"" and r.stderr == b""
 
 
 def test_silent_when_token_is_refused(stub):
     stub.inbox = [MESSAGE]
-    r = run_hook("claude", stub.url, token="wrong")
+    r = run_hook("claude", stub.url, token="wrong", stdin=CLAUDE_PROMPT)
     assert r.returncode == 0 and r.stdout == b""
     assert stub.acks == []
 
 
 def test_silent_without_any_token(stub, tmp_path):
     stub.inbox = [MESSAGE]
-    r = run_hook("claude", stub.url, token=None, home=tmp_path)
+    r = run_hook("claude", stub.url, token=None, home=tmp_path, stdin=CLAUDE_PROMPT)
     assert r.returncode == 0 and r.stdout == b""
+
+
+def test_antigravity_acks_on_delivery_with_its_conversation_id(stub):
+    stub.inbox = [MESSAGE]
+    r = run_hook("antigravity", stub.url, stdin=json.dumps({"conversationId": "b2d1b325-5033-4ccf-b7b4-136ba418c865", "workspacePaths": ["/tmp/some-repo"]}).encode())
+    assert r.returncode == 0
+    payload = json.loads(r.stdout)
+    assert payload["injectSteps"][0]["ephemeralMessage"].startswith("[agent-bus] You have 1 new message")
+    assert stub.acks == [{"me": "antigravity@some-repo#b2d1b325", "ids": [7]}]
 
 
 def test_antigravity_survives_malformed_stdin(stub):
     stub.inbox = [MESSAGE]
     r = run_hook("antigravity", stub.url, stdin=b"not json at all")
     assert r.returncode == 0
-    payload = json.loads(r.stdout)
-    assert payload["injectSteps"][0]["ephemeralMessage"].startswith("[agent-bus] You have 1 new message")
-    assert stub.acks[0]["me"].startswith("antigravity@") and stub.acks[0]["ids"] == [7]
+    assert json.loads(r.stdout)["injectSteps"][0]["ephemeralMessage"].startswith("[agent-bus] You have 1 new message")
 
 
 def test_antigravity_empty_is_valid_json(stub):
@@ -145,6 +164,6 @@ def test_antigravity_empty_is_valid_json(stub):
 def test_hooks_json_exec_form_via_uv(stub):
     """The exact invocation hooks.json uses: uv run --no-project <cli.py> hook --agent claude."""
     stub.inbox = [MESSAGE]
-    r = run_hook("claude", stub.url, runner=["uv", "run", "--no-project"])
+    r = run_hook("claude", stub.url, stdin=CLAUDE_PROMPT, runner=["uv", "run", "--no-project"])
     assert r.returncode == 0
     assert r.stdout.decode().startswith("[agent-bus] You have 1 new message")

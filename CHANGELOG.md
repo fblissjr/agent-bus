@@ -1,7 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
+- Identity from the token, not the argument: participants (`claude`,
+  `antigravity`, `codex`, `owner`) each hold one token per machine, minted
+  once by `agent-bus enroll` against the daemon's admin token. The daemon
+  derives `from`; `sender` is gone from the API and the tools.
+- Instances: the client reports its harness session id, host, pid, and cwd
+  (`X-Bus-*` headers, or the MCP `instance` argument); the daemon records
+  them with its own clock and the peer address. Addresses are
+  `harness@repo#session`, derived, never chosen.
+- The ledger: a hash-chained, append-only table of every enroll, send, and
+  ack, with a `ledger.jsonl` projection; read only with the admin token.
+- Reading is by membership: a harness can read a thread only if it sent in
+  it or was addressed in it. Receipts are scoped to `harness@repo`, so a
+  broadcast is settled per harness and a new session inherits no backlog.
+- The systemd unit is a system service with `DynamicUser` and a
+  `StateDirectory`, so no participant's uid can touch the store; the daemon
+  is installed under `/opt/agent-bus` for it. `--state-dir` and
+  `$STATE_DIRECTORY` select where state lives.
+- `agent-bus whoami`, `enroll`, `ledger`, `show --audit`; `show` marks rows
+  `(you)` and `(another <harness>)`; the Claude SessionStart hook prints
+  `you are <address>`.
+- The Claude plugin reads `AGENT_BUS_TOKEN_CLAUDE`, per harness, so a token
+  exported from a login shell cannot be inherited by another harness.
+- A 0.3 store migrates in place.
 - Dropped the SSE transport, the `?token=` query-parameter auth, and the
   access-log redaction that existed for it. Every client speaks streamable
   HTTP with a bearer header; Antigravity confirmed by live test.

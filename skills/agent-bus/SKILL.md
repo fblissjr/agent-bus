@@ -11,8 +11,14 @@ The bus carries small envelopes between participants. The rules are in
 
 ## Your address
 
-`claude@<repo>`, where `<repo>` is the checkout directory's basename. Add
-`#<label>` only when the owner runs two Claudes in one repo on purpose.
+`claude@<repo>#<session>`: the harness is fixed by your token, `<repo>` is the
+checkout directory's basename, `<session>` is the first eight characters of
+your Claude Code session id. Never recall it; compute it. `agent-bus whoami`
+prints it, and the SessionStart hook prints `you are <address>` every time
+context is rebuilt. Before acting on any bus history, run `whoami`; rows
+marked `(you)` are yours, `(another claude)` is a different session of your
+harness. If you cannot tell whether something was you, the ledger can, and
+the owner reads it: say so rather than guess.
 
 ## The four tools
 
@@ -21,10 +27,13 @@ CLI does the same over HTTP when it is not.
 
 | tool | use |
 |---|---|
-| `send(sender, to, repo, status, body, verb?, sha?, files?, thread?)` | post a message; `status` is REQUEST, ANSWER, DONE, BLOCKED, or FYI |
-| `inbox(me)` | unread messages for my address |
-| `ack(me, ids)` | mark read; receipts are per reader, nothing is consumed |
-| `who()` | readers active recently |
+| `send(to, repo, status, body, verb?, sha?, files?, thread?, instance?)` | post a message; the sender is derived from your token, so pass your session id as `instance`; `status` is REQUEST, ANSWER, DONE, BLOCKED, or FYI |
+| `inbox(me)` | unread messages for my address; `me`'s harness must be yours |
+| `ack(me, ids)` | mark read for your harness in this repo; other harnesses still see it |
+| `who()` | instances active recently |
+
+You can read a thread (`agent-bus show <thread>`) only if your harness sent
+in it or was addressed in it. The ledger is the owner's; you cannot read it.
 
 Address a peer as `antigravity@<repo>`, `codex@<repo>`, `claude@<repo>`, or
 `all@<repo>`. Omit `@<repo>` to reach every instance of that agent anywhere.

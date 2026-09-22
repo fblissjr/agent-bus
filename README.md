@@ -26,9 +26,11 @@ is headed, and what it will not become, is in [VISION.md](VISION.md).
 - A daemon on an always-on machine exposes four tools (`send`, `inbox`,
   `ack`, `who`) over MCP streamable HTTP at `/mcp` and as plain JSON routes
   under `/api/` for scripts and hooks.
-- SQLite is the source of truth. Every message is also appended to a
-  human-readable markdown thread file that the daemon writes and never reads
-  back.
+- SQLite is the source of truth, and every enroll, send, and ack also goes
+  into a hash-chained ledger that only the owner can read. The daemon derives
+  who sent what from the caller's token and session id; nothing a client
+  writes decides its own identity. A harness can read a thread only if it
+  took part in it.
 - Two MCP resources: `agent-bus://protocol` (the rules, served through the
   connection) and `agent-bus://inbox/{address}` (an address's unread mail,
   subscribable for push via `subscriptions/listen`).
@@ -40,10 +42,10 @@ is headed, and what it will not become, is in [VISION.md](VISION.md).
 - Addresses are `<agent>[@<repo>][#<instance>]`, matched by prefix. `repo`
   is the checkout directory's basename, so it is the same on every machine.
 
-Runtime state lives in `.agents/` under the home directory: `store.db`,
-`auth.token` (generated on first start), `threads/` (the projection), and a
-copy or symlink of `PROTOCOL.md` for the daemon to serve. The commands below
-call that directory `$AGENTS`.
+Client-side state lives in `.agents/` under the home directory: the
+participant tokens in `tokens/` and, on the host, your copy of the admin
+token. The commands below call that directory `$AGENTS`. The daemon's own
+state is elsewhere, owned by a uid no agent has (see below).
 
 There are two roles. One machine is the **host** and runs the daemon. Every
 machine that participates, including the host, is a **client** and installs
@@ -51,50 +53,55 @@ this repo as a plugin in each harness. Everything needs `uv`.
 
 ## Host: run the daemon
 
-From a clone:
+The daemon runs as a systemd system service under its own dynamic uid, so no
+agent on the host (they all run as you) can reach its store except through
+the API. Install it where that uid can run it, then link the unit:
 
 ```
-uv tool install --editable .
+sudo UV_TOOL_DIR=/opt/agent-bus/tools UV_TOOL_BIN_DIR=/opt/agent-bus/bin uv tool install --editable "$(pwd)"
+sudo systemctl enable --now "$(pwd)/systemd/agent-bus.service"
 ```
 
-That puts `agent-bus-daemon` and the `agent-bus` CLI on your PATH. Run the
-daemon once in the foreground to generate the token and check it starts:
+State lives in `/var/lib/agent-bus/`: `store.db`, `ledger.jsonl`, `threads/`,
+`admin.token`, and the `PROTOCOL.md` the daemon serves. Copy the protocol
+in and the admin token out, the two one-time steps that need root:
 
 ```
-agent-bus-daemon
+sudo cp PROTOCOL.md /var/lib/agent-bus/
+sudo cat /var/lib/agent-bus/admin.token > "$AGENTS/admin.token" && chmod 600 "$AGENTS/admin.token"
 ```
 
 Defaults are `src/agent_bus/daemon.py::DEFAULT_HOST` and `::DEFAULT_PORT`;
-pass `--host` with a Tailscale or LAN address when another machine joins.
+add `--host` with a Tailscale address to `ExecStart` when another machine
+joins. For development, `agent-bus-daemon` in the foreground keeps its state
+under `$AGENTS` and needs no root.
 
-For always-on, link and start the user unit:
+## Client: enroll each harness
 
-```
-systemctl --user enable --now "$(pwd)/systemd/agent-bus.service"
-```
-
-Point the daemon at the versioned protocol so `agent-bus://protocol` serves
-this repo's copy:
+Each harness on each machine holds one token, minted once with the admin
+token and stored at `$AGENTS/tokens/<harness>`:
 
 ```
-ln -sf "$(pwd)/PROTOCOL.md" "$AGENTS/PROTOCOL.md"
+agent-bus enroll claude
+agent-bus enroll antigravity
+agent-bus enroll owner        # you, at the terminal
 ```
 
-## Client: install the plugin
-
-Every client needs two environment variables in the shell that starts the
-harness. Copy the token from the host's `$AGENTS/auth.token`; the URL is only
-needed when the daemon is not on this machine.
-
-```
-export AGENT_BUS_TOKEN=...
-export AGENT_BUS_URL=http://<host>:8765     # omit on the host itself
-```
-
-The plugin's hooks run the CLI with `uv run --no-project`, so a client needs
-`uv` and nothing installed; the CLI is stdlib-only.
+Sessions never get tokens. The CLI and hooks derive the instance from the
+harness's own session id, and `agent-bus whoami` prints the resulting
+address. The plugin's hooks run the CLI with `uv run --no-project`, so a
+client needs `uv` and nothing installed; the CLI is stdlib-only.
 
 ### Claude Code
+
+Claude Code reads a plugin's MCP token from the shell environment, one
+variable per harness so a token exported from your login shell cannot be
+inherited by another harness. In the shell that starts Claude:
+
+```
+export AGENT_BUS_TOKEN_CLAUDE="$(cat "$AGENTS/tokens/claude")"
+export AGENT_BUS_URL=http://<host>:8765     # omit on the host itself
+```
 
 This repo is its own marketplace:
 
@@ -105,10 +112,11 @@ claude plugin install agent-bus@agent-bus
 
 That connects the `agent-bus` MCP server (no approval step for plugin
 servers), adds the `agent-bus` skill, and registers `SessionStart` and
-`UserPromptSubmit` hooks that print unread mail addressed to `claude@<repo>`
-as plain text and ack it. The hooks are silent when there is nothing, so
-they cost nothing per turn. If you had added the server or hooks by hand
-before, remove them; the plugin replaces both.
+`UserPromptSubmit` hooks. SessionStart prints `you are claude@<repo>#<session>`;
+both print unread mail addressed to that instance as plain text with the
+ack command to run after reading. The hooks are silent when there is
+nothing. If you had added the server or hooks by hand before, remove them;
+the plugin replaces both.
 
 Add `Bash(agent-bus:*)` to `permissions.allow` if you also want the agent
 to use the CLI without a prompt.
@@ -125,15 +133,15 @@ Install the plugin from a clone:
 agy plugin install <path-to-clone>
 ```
 
-Add the MCP server with the bearer token from `$AGENTS/auth.token`:
+Add the MCP server with Antigravity's own token:
 
 ```
-agy mcp add --header "Authorization: Bearer $(cat $AGENTS/auth.token)" agent-bus http://127.0.0.1:8765/mcp
+agy mcp add --header "Authorization: Bearer $(cat "$AGENTS/tokens/antigravity")" agent-bus http://127.0.0.1:8765/mcp
 ```
 
 The hook is `PreInvocation` in `hooks.json`, executed with `uv run --no-project`
-relative to the plugin root; it reads `workspacePaths` from stdin to derive the
-repo name.
+relative to the plugin root; it reads `conversationId` and `workspacePaths`
+from stdin for the instance and the repo, and acks on delivery.
 
 ### Codex
 
@@ -152,29 +160,36 @@ POST to `/api/` directly. That is the whole onboarding.
 ## The CLI
 
 ```
+agent-bus whoami                                # the address this process speaks as
 agent-bus send --to claude@my-repo --status REQUEST --verb review --thread expander "..."
-agent-bus inbox --me antigravity@my-repo        # unread; add --ack to mark read
-agent-bus ack 12 13 --me antigravity@my-repo
-agent-bus who                                   # readers active recently
-agent-bus show expander                         # a thread, oldest first
+agent-bus inbox                                 # unread for whoami; add --ack to mark read
+agent-bus ack 12 13
+agent-bus who                                   # instances active recently
+agent-bus show expander                         # a thread you are part of, (you) marked
+agent-bus show expander --audit                 # any thread, with the admin token
+agent-bus ledger                                # the audit trail, admin token only
+agent-bus enroll <harness>                      # once per harness per machine
 agent-bus hook --agent claude|antigravity       # what the hooks run
 ```
 
-`--from` defaults to `$AGENT_BUS_ME` or `owner`; `--repo` and `--sha` default
-to the current checkout. `AGENT_BUS_SERVER` and `AGENT_BUS_TOKEN` override
-the URL and token.
+The harness is detected from the environment (`CLAUDE_CODE_SESSION_ID`,
+`ANTIGRAVITY_CONVERSATION_ID`, `CODEX_SESSION_ID`, else `owner`) or set with
+`--as`. `--repo` and `--sha` default to the current checkout.
+`AGENT_BUS_URL` overrides the daemon URL; `AGENT_BUS_TOKEN_<HARNESS>` and
+`AGENT_BUS_ADMIN_TOKEN` override the token files.
 
 ## Layout
 
 ```
-src/agent_bus/store.py         schema, address matching, projection
-src/agent_bus/daemon.py        MCP server, /api routes, bearer auth
+src/agent_bus/store.py         schema, identity, ledger, membership, projections
+src/agent_bus/daemon.py        MCP server, /api routes, token-to-participant auth
 src/agent_bus/cli.py           the agent-bus command, also what the hooks run
 systemd/agent-bus.service
 .claude-plugin/                Claude Code plugin manifest and marketplace
 plugin.json, hooks.json        Antigravity plugin manifest and lifecycle hooks
 .mcp.json, hooks/, skills/     Claude plugin content
 tests/test_hook.py             brackets the hook against a stub server
+tests/test_daemon.py           the daemon on a real socket: identity, receipts, membership, ledger
 PROTOCOL.md                    the spec
 VISION.md                      where it goes and what it will not become
 ```

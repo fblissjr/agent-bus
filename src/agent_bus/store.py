@@ -1,32 +1,47 @@
-"""SQLite store for the bus, plus the write-only markdown projection of each thread.
+"""SQLite store for the bus: messages, receipts, participants, and the ledger, plus
+the write-only projections (markdown threads and ledger.jsonl).
 
-Address grammar is `<agent>[@<repo>][#<instance>]`. A message reaches a reader
+Address grammar is `<harness>[@<repo>][#<instance>]`. A message reaches a reader
 when every component the message's `to` names equals the reader's component;
-components the `to` leaves out are wildcards. `all` as the agent matches every
-agent. So `to=claude@X` reaches `claude@X` and `claude@X#review`, while
-`to=claude@X#review` reaches only that one.
-"""
+components the `to` leaves out are wildcards. `all` as the harness matches every
+harness. So `to=claude@X` reaches `claude@X#a1` and `claude@X#b2`, while
+`to=claude@X#a1` reaches only that instance.
 
+The harness half of a sender is verified from its token; the instance, host,
+pid, and cwd are reported by the client and recorded as such. Receipts are
+scoped to `harness@repo`, so a broadcast to `claude@X` is settled for every
+Claude in X by the first one to ack it, and a new session does not inherit the
+backlog. The ledger records which instance did what.
+
+Threads are the groups. A harness may read a thread only if it sent in it or
+was addressed in it; the ledger is read only by the owner. Nothing here is
+readable by another uid: projections exist for the owner with sudo, not for
+participants."""
+
+import hashlib
 import json
+import os
 import re
+import secrets
 import sqlite3
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TypedDict
 from urllib.parse import quote
 
-AGENTS_DIR = Path.home() / ".agents"
-DB_PATH = AGENTS_DIR / "store.db"
-THREADS_DIR = AGENTS_DIR / "threads"
+DEFAULT_STATE_DIR = Path.home() / ".agents"
 
 STATUSES = ("REQUEST", "ANSWER", "DONE", "BLOCKED", "FYI")
 DEFAULT_THREAD = "general"
-# A reader counts as active in who() if it called any tool within this window.
+DEFAULT_INSTANCE = "default"
+# An instance counts as active in who() if it called any tool within this window.
 ACTIVE_WINDOW = timedelta(minutes=15)
 
-# repo and thread become path components under THREADS_DIR.
+# repo and thread become path components under threads/.
 SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+HARNESS = re.compile(r"^[a-z][a-z0-9_-]*$")
 ADDRESS = re.compile(r"^(?P<agent>[a-z][a-z0-9_-]*)(?:@(?P<repo>[A-Za-z0-9][A-Za-z0-9._-]*))?(?:#(?P<instance>[A-Za-z0-9][A-Za-z0-9._-]*))?$")
 
 SCHEMA = """
@@ -34,6 +49,7 @@ CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY,
     ts TEXT NOT NULL,
     sender TEXT NOT NULL,
+    harness TEXT NOT NULL,
     recipient TEXT NOT NULL,
     to_agent TEXT NOT NULL,
     to_repo TEXT,
@@ -53,26 +69,63 @@ CREATE TABLE IF NOT EXISTS receipts (
     PRIMARY KEY (message_id, reader)
 );
 CREATE TABLE IF NOT EXISTS seen (
-    reader TEXT PRIMARY KEY,
+    address TEXT PRIMARY KEY,
+    harness TEXT NOT NULL,
+    host TEXT,
     ts TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS participants (
+    name TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL,
+    ts TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ledger (
+    seq INTEGER PRIMARY KEY,
+    ts TEXT NOT NULL,
+    event TEXT NOT NULL,
+    harness TEXT NOT NULL,
+    instance TEXT,
+    host TEXT,
+    pid INTEGER,
+    cwd TEXT,
+    peer TEXT,
+    message_id INTEGER,
+    body_hash TEXT,
+    prev_hash TEXT NOT NULL,
+    hash TEXT NOT NULL
 );
 """
 
 COLUMNS = ("id", "ts", "from", "to", "repo", "thread", "status", "verb", "sha", "files", "body")
 SELECT = "SELECT id, ts, sender, recipient, repo, thread, status, verb, sha, files, body FROM messages"
+LEDGER_FIELDS = ("seq", "ts", "event", "harness", "instance", "host", "pid", "cwd", "peer", "message_id", "body_hash", "prev_hash")
+GENESIS = "0" * 64
 
 # Functional form because `from` is a keyword. This is the tools' output schema.
 Message = TypedDict("Message", {"id": int, "ts": str, "from": str, "to": str, "repo": str, "thread": str, "status": str, "verb": str | None, "sha": str | None, "files": list[str], "body": str})
 
 
 class Reader(TypedDict):
-    reader: str
+    address: str
+    harness: str
+    host: str | None
     last_seen: str
 
 
-def inbox_uri(address):
-    """Resource URI for an inbox. `#` is a URI fragment delimiter, so the instance label is percent-encoded."""
-    return "agent-bus://inbox/" + quote(address, safe="@")
+@dataclass(frozen=True)
+class Identity:
+    """Who is calling: `harness` verified from the token, the rest reported by the client."""
+    harness: str
+    instance: str | None = None
+    host: str | None = None
+    pid: int | None = None
+    cwd: str | None = None
+    peer: str | None = None
+
+    def address(self, repo):
+        """The derived sender address. The caller's own checkout wins over the message's repo."""
+        own = Path(self.cwd).name if self.cwd else repo
+        return f"{self.harness}@{own}#{self.instance or DEFAULT_INSTANCE}"
 
 
 def now():
@@ -82,14 +135,28 @@ def now():
 def parse_address(text):
     m = ADDRESS.match(text or "")
     if m is None:
-        raise ValueError(f"bad address {text!r}: expected <agent>[@<repo>][#<instance>]")
+        raise ValueError(f"bad address {text!r}: expected <harness>[@<repo>][#<instance>]")
     return m["agent"], m["repo"], m["instance"]
+
+
+def receipt_scope(me):
+    agent, repo, _ = parse_address(me)
+    return f"{agent}@{repo}" if repo else agent
 
 
 def check_slug(kind, text):
     if not SLUG.match(text or ""):
         raise ValueError(f"bad {kind} {text!r}: letters, digits, '.', '_', '-' only")
     return text
+
+
+def token_hash(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def inbox_uri(address):
+    """Resource URI for an inbox. `#` is a URI fragment delimiter, so the instance label is percent-encoded."""
+    return "agent-bus://inbox/" + quote(address, safe="@")
 
 
 def row_to_message(row):
@@ -109,6 +176,10 @@ def format_message(msg):
     return "\n".join(lines)
 
 
+def ledger_hash(row):
+    return hashlib.sha256(json.dumps({k: row[k] for k in LEDGER_FIELDS}, sort_keys=True).encode()).hexdigest()
+
+
 def locked(fn):
     def wrapper(self, *args, **kwargs):
         with self.lock:
@@ -117,23 +188,60 @@ def locked(fn):
 
 
 class Store:
-    def __init__(self, db_path=DB_PATH, threads_dir=THREADS_DIR):
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.threads_dir = threads_dir
+    def __init__(self, state_dir=DEFAULT_STATE_DIR):
+        self.state_dir = Path(state_dir)
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.threads_dir = self.state_dir / "threads"
+        self.ledger_path = self.state_dir / "ledger.jsonl"
         # MCP tools run in worker threads and the /api routes on the event loop;
         # one connection behind one lock serves both and keeps projection appends ordered.
-        self.db = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
+        self.db = sqlite3.connect(self.state_dir / "store.db", isolation_level=None, check_same_thread=False)
         self.lock = threading.Lock()
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.executescript(SCHEMA)
+        self.migrate()
 
-    def touch(self, reader):
-        self.db.execute("INSERT INTO seen (reader, ts) VALUES (?, ?) ON CONFLICT(reader) DO UPDATE SET ts = excluded.ts", (reader, now()))
+    def migrate(self):
+        """0.3 stores predate verified senders and instances: backfill the harness from the
+        sender prefix, and rebuild the transient presence table in its new shape."""
+        columns = {r[1] for r in self.db.execute("PRAGMA table_info(messages)")}
+        if "harness" not in columns:
+            self.db.execute("ALTER TABLE messages ADD COLUMN harness TEXT NOT NULL DEFAULT ''")
+            self.db.execute("UPDATE messages SET harness = substr(sender, 1, instr(sender || '@', '@') - 1) WHERE harness = ''")
+        if "address" not in {r[1] for r in self.db.execute("PRAGMA table_info(seen)")}:
+            self.db.execute("DROP TABLE seen")
+            self.db.execute("CREATE TABLE seen (address TEXT PRIMARY KEY, harness TEXT NOT NULL, host TEXT, ts TEXT NOT NULL)")
+
+    # participants
 
     @locked
-    def send(self, sender, to, repo, status, body, verb=None, sha=None, files=None, thread=None):
-        parse_address(sender)
+    def enroll(self, name, identity):
+        """Mint a participant token, replacing any earlier one. Returns the plaintext once."""
+        if not HARNESS.match(name or "") or name in ("all", "admin"):
+            raise ValueError(f"bad participant name {name!r}")
+        token = secrets.token_urlsafe(32)
+        self.db.execute("INSERT INTO participants (name, token_hash, ts) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET token_hash = excluded.token_hash, ts = excluded.ts", (name, token_hash(token), now()))
+        self.record("enroll", identity, body=name)
+        return token
+
+    @locked
+    def verify(self, token):
+        row = self.db.execute("SELECT name FROM participants WHERE token_hash = ?", (token_hash(token),)).fetchone()
+        return row[0] if row else None
+
+    # messages
+
+    def touch(self, identity, address):
+        self.db.execute("INSERT INTO seen (address, harness, host, ts) VALUES (?, ?, ?, ?) ON CONFLICT(address) DO UPDATE SET host = excluded.host, ts = excluded.ts", (address, identity.harness, identity.host, now()))
+
+    def own_address(self, identity, me):
+        agent, _, _ = parse_address(me)
+        if agent != identity.harness:
+            raise ValueError(f"{me!r} is not an address of {identity.harness}")
+
+    @locked
+    def send(self, identity, to, repo, status, body, verb=None, sha=None, files=None, thread=None):
         to_agent, to_repo, to_instance = parse_address(to)
         check_slug("repo", repo)
         thread = check_slug("thread", thread or DEFAULT_THREAD)
@@ -142,14 +250,15 @@ class Store:
         if not body or not body.strip():
             raise ValueError("body is empty")
         files = list(files or [])
-        ts = now()
+        sender = identity.address(repo)
         cur = self.db.execute(
-            "INSERT INTO messages (ts, sender, recipient, to_agent, to_repo, to_instance, repo, thread, status, verb, sha, files, body)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (ts, sender, to, to_agent, to_repo, to_instance, repo, thread, status, verb, sha, json.dumps(files), body),
+            "INSERT INTO messages (ts, sender, harness, recipient, to_agent, to_repo, to_instance, repo, thread, status, verb, sha, files, body)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (now(), sender, identity.harness, to, to_agent, to_repo, to_instance, repo, thread, status, verb, sha, json.dumps(files), body),
         )
-        self.touch(sender)
+        self.touch(identity, sender)
         msg = self._get(cur.lastrowid)
+        self.record("send", identity, message_id=msg["id"], body=body)
         self.project(msg)
         return msg
 
@@ -158,9 +267,10 @@ class Store:
         return row_to_message(row) if row else None
 
     @locked
-    def inbox(self, me):
+    def inbox(self, identity, me):
+        self.own_address(identity, me)
         agent, repo, instance = parse_address(me)
-        self.touch(me)
+        self.touch(identity, me)
         rows = self.db.execute(
             SELECT + " m WHERE (to_agent = ? OR to_agent = 'all')"
             " AND (to_repo IS NULL OR to_repo = ?)"
@@ -168,30 +278,77 @@ class Store:
             " AND sender != ?"
             " AND NOT EXISTS (SELECT 1 FROM receipts r WHERE r.message_id = m.id AND r.reader = ?)"
             " ORDER BY id",
-            (agent, repo, instance, me, me),
+            (agent, repo, instance, me, receipt_scope(me)),
         ).fetchall()
         return [row_to_message(r) for r in rows]
 
     @locked
-    def ack(self, me, ids):
-        parse_address(me)
-        self.touch(me)
+    def ack(self, identity, me, ids):
+        self.own_address(identity, me)
+        self.touch(identity, me)
         ts = now()
-        self.db.executemany("INSERT OR IGNORE INTO receipts (message_id, reader, ts) VALUES (?, ?, ?)", [(int(i), me, ts) for i in ids])
+        scope = receipt_scope(me)
+        self.db.executemany("INSERT OR IGNORE INTO receipts (message_id, reader, ts) VALUES (?, ?, ?)", [(int(i), scope, ts) for i in ids])
+        for i in ids:
+            self.record("ack", identity, message_id=int(i))
         return len(ids)
 
     @locked
     def who(self):
         cutoff = (datetime.now(timezone.utc) - ACTIVE_WINDOW).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-        rows = self.db.execute("SELECT reader, ts FROM seen WHERE ts >= ? ORDER BY ts DESC", (cutoff,)).fetchall()
-        return [{"reader": r, "last_seen": ts} for r, ts in rows]
+        rows = self.db.execute("SELECT address, harness, host, ts FROM seen WHERE ts >= ? ORDER BY ts DESC", (cutoff,)).fetchall()
+        return [{"address": a, "harness": h, "host": host, "last_seen": ts} for a, h, host, ts in rows]
 
     @locked
-    def thread(self, repo, thread):
+    def thread(self, identity, repo, thread, audit=False):
+        """A thread is a group: readable by a harness that sent in it or was addressed in it, and by the owner's audit token."""
         check_slug("repo", repo)
         check_slug("thread", thread)
+        if not audit:
+            member = self.db.execute(
+                "SELECT 1 FROM messages WHERE repo = ? AND thread = ? AND (harness = ? OR to_agent = ? OR to_agent = 'all') LIMIT 1",
+                (repo, thread, identity.harness, identity.harness),
+            ).fetchone()
+            if member is None:
+                raise ValueError(f"{identity.harness} is not a participant in {repo}/{thread}")
         rows = self.db.execute(SELECT + " WHERE repo = ? AND thread = ? ORDER BY id", (repo, thread)).fetchall()
         return [row_to_message(r) for r in rows]
+
+    # ledger
+
+    def record(self, event, identity, message_id=None, body=None):
+        """Append one hash-chained row. Callers hold the lock, so seq and prev_hash are consistent."""
+        last = self.db.execute("SELECT seq, hash FROM ledger ORDER BY seq DESC LIMIT 1").fetchone()
+        row = {
+            "seq": (last[0] + 1) if last else 1, "ts": now(), "event": event, "harness": identity.harness, "instance": identity.instance,
+            "host": identity.host, "pid": identity.pid, "cwd": identity.cwd, "peer": identity.peer,
+            "message_id": message_id, "body_hash": hashlib.sha256(body.encode()).hexdigest() if body else None, "prev_hash": last[1] if last else GENESIS,
+        }
+        row["hash"] = ledger_hash(row)
+        self.db.execute(
+            "INSERT INTO ledger (seq, ts, event, harness, instance, host, pid, cwd, peer, message_id, body_hash, prev_hash, hash) VALUES (:seq, :ts, :event, :harness, :instance, :host, :pid, :cwd, :peer, :message_id, :body_hash, :prev_hash, :hash)",
+            row,
+        )
+        with self.ledger_path.open("a") as f:
+            f.write(json.dumps(row) + "\n")
+        os.chmod(self.ledger_path, 0o600)
+
+    @locked
+    def ledger(self, limit=200, harness=None):
+        where, args = ("WHERE harness = ?", [harness]) if harness else ("", [])
+        rows = self.db.execute(f"SELECT {', '.join(LEDGER_FIELDS)}, hash FROM ledger {where} ORDER BY seq DESC LIMIT ?", args + [int(limit)]).fetchall()
+        return [dict(zip(LEDGER_FIELDS + ("hash",), r)) for r in reversed(rows)]
+
+    @locked
+    def verify_ledger(self):
+        """Walk the chain from genesis; returns the first bad seq, or None when intact."""
+        prev = GENESIS
+        for r in self.db.execute(f"SELECT {', '.join(LEDGER_FIELDS)}, hash FROM ledger ORDER BY seq"):
+            row = dict(zip(LEDGER_FIELDS + ("hash",), r))
+            if row["prev_hash"] != prev or ledger_hash(row) != row["hash"]:
+                return row["seq"]
+            prev = row["hash"]
+        return None
 
     def project(self, msg):
         path = self.threads_dir / msg["repo"] / f"{msg['thread']}.md"
@@ -200,3 +357,4 @@ class Store:
             if f.tell() == 0:
                 f.write(f"# {msg['repo']} / {msg['thread']}\n\nProjection written by agent-bus. Do not edit; send with the CLI or MCP tools.\n\n")
             f.write(format_message(msg) + "\n")
+        os.chmod(path, 0o600)
