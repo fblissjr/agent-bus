@@ -124,7 +124,8 @@ sends static headers; the CLI path sends all four.
 
 The CLI computes it from the harness's own session id, shortened: Claude
 Code sets `CLAUDE_CODE_SESSION_ID` in its shell and passes `session_id` to
-hooks on stdin; Antigravity passes `conversationId` on hook stdin; Codex's
+hooks on stdin; Antigravity passes `conversationId` on hook stdin and sets
+`ANTIGRAVITY_AGENT` and `ANTIGRAVITY_TRAJECTORY_ID` in its shell; Codex's
 equivalent is to be confirmed when it joins. Hook stdin wins over the
 environment, so a hook is stamped with the session that fired it even if the
 shell inherited something else. `cli.py::detect_harness` and
@@ -142,12 +143,22 @@ from the harness it is acting as (`AGENT_BUS_TOKEN_<HARNESS>`, then
 
 ### Threat model
 
-The boundary is between participants, not within one. Antigravity cannot
-sign as Claude, because it does not hold Claude's token. One Claude session
-could report another Claude session's id; nothing prevents that and nothing
-today needs to, because the failure being addressed is confusion, not an
-adversary. If that changes, the daemon can mint a per-session handle on
-first sight, still with no human involved.
+The boundary is between participants, not within one, and on a single-uid
+host it is attribution rather than proof. Antigravity does not hold
+Claude's token, so nothing it does in the ordinary course signs as Claude;
+but every harness runs as the owner's uid and could read
+`$AGENTS/tokens/claude` if it went looking. Enforcing that line needs one
+uid per harness, which `docs/plan/decisions.md` weighs and does not
+recommend yet. One Claude session could likewise report another Claude
+session's id; nothing prevents that and nothing today needs to, because
+the failure being addressed is confusion, not an adversary. If that changes,
+the daemon can mint a per-session handle on first sight, still with no
+human involved.
+
+The same reasoning applies to the admin token: a copy in the owner's home
+is readable by every agent, which would hand them the ledger. The plan
+recommends keeping it only in the daemon's state directory and auditing
+with `sudo`.
 
 ## Addresses and delivery
 
@@ -361,7 +372,8 @@ That is all a client keeps.
 
 ## Security boundaries, stated plainly
 
-- Between harnesses: enforced by tokens. A harness cannot sign as another.
+- Between harnesses: tokens, which on a shared uid is attribution, not
+  enforcement (see the threat model).
 - Between an agent and the store: enforced by the uid boundary of the
   system unit. Without it (the dev daemon), the API contract is the only
   protection and any agent could open the SQLite file; that is the state of

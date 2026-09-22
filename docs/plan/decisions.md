@@ -1,151 +1,321 @@
-# Agent Bus: Open Decisions & Architectural Recommendations
+last updated: 2026-09-22
 
-This document outlines the strategic and architectural decisions facing `agent-bus` following the **0.4.0** cutover. For each decision, the context, technical trade-offs, and Antigravity's recommendations are detailed below.
+# Open decisions
 
----
+What still has to be decided about agent-bus, with enough context to decide
+it, and each agent's recommendation with the reasons for and against. Both
+Claude and Antigravity were asked for this; the two answers are merged here
+so there is one document. Where they agree, one recommendation is given.
+Where they differ, both positions are stated and marked **differs**, and the
+owner rules.
 
-## Decision 1: UID Boundary Enforcement (`systemd` System Service)
+Settled decisions live in `PROTOCOL.md`; how the system works lives in
+`docs/design/system.md`. When a decision here is made, move its outcome into
+one of those and delete it from this file.
 
-### Context
-In **0.4.0**, the daemon runs as a systemd user service (`agent-bus.service` in `~/.config/systemd/user/`) under user `fbliss`, storing state in `~/.agents/store.db`. The systemd system service unit (`systemd/agent-bus.service`) has been drafted with `DynamicUser=yes` and `StateDirectory=agent-bus` (`/var/lib/agent-bus/`), but has not yet been installed system-wide.
+Ordered by how much the answer changes what gets built next.
 
-### The Question
-*When should the owner run the 4 root/sudo commands to move the daemon under a dynamic system UID?*
+## 1. Which boundaries are real on a single-uid host
 
-### Technical Analysis
-- **Why do it:**
-  - On Linux, file modes (`0600`) offer **zero isolation** against processes running under the same UID. Any agent harness (Claude, Antigravity, or Codex) executing shell commands or Python scripts could technically open, modify, or truncate `~/.agents/store.db` or `ledger.jsonl`.
-  - A dynamic system UID (`DynamicUser=yes`) is the **only true security boundary** on a single-user machine. It guarantees that the store and ledger cannot be written to or tampered with except through the daemon's authenticated HTTP API.
-- **Why wait:**
-  - It requires `sudo` privileges once to install `/opt/agent-bus` and enable the system unit.
-  - In our current single-user local development environment, all agents adhere to the API contract, and the SHA-256 hash chain immediately exposes any out-of-band tampering.
+**Context.** Everything on the host runs as the owner's uid: every Claude
+session, every Antigravity session, Codex when it arrives, and the owner's
+own shell. The daemon's state directory can be put behind a different uid
+(the system unit), but the client side cannot: `$AGENTS/tokens/claude`,
+`$AGENTS/tokens/antigravity`, and any copy of the admin token in the owner's
+home are readable by every process running as the owner, which is every
+agent. So:
 
-### Antigravity Recommendation
-> **Recommendation: Apply the UID boundary before enabling network access over Tailscale.**
-> For local single-machine development today, the dev daemon works cleanly. However, as soon as network access or cross-machine nodes (e.g. the Mac) are introduced, the UID boundary should be made active to protect the store from any potential privilege escalation.
+- The store and the ledger can be made unreachable except through the API.
+  That boundary is real.
+- Cross-harness identity is not. Antigravity could read Claude's token file
+  and sign as Claude. Nothing today does that, and an agent that did would
+  be violating its own instructions, but it is policy, not enforcement.
+  `docs/design/system.md` says so.
+- A copy of the admin token in the owner's home hands every agent the key to
+  the ledger and to every thread, which would quietly undo the point of
+  making the ledger admin-only.
 
----
+**Options.**
 
-## Decision 2: Codex Harness Onboarding (0.5.0)
+- (a) Accept attribution within the uid. Keep per-harness token files; treat
+  cross-harness identity as high-confidence attribution; keep the admin
+  token only in the daemon's state directory and audit with `sudo`.
+- (b) One uid per harness. Run each harness as its own system user with its
+  own token file. Identity becomes enforced. Cost: every harness install,
+  plugin, and checkout has to work across uid boundaries, and the owner
+  loses the "it all runs as me" simplicity of a solo box.
+- (c) A keystore per harness. Not consumable by the harnesses today, and
+  still same-uid on Linux.
 
-### Context
-The bus currently supports two interactive harnesses: `claude` (Claude Code) and `antigravity` (Google Antigravity). The next harness on the roadmap is OpenAI's `codex`.
+**Claude recommends (a), with the admin-token half done now.** The failure
+this work addressed was confusion between instances, and attribution solves
+confusion. Enforcement against a misbehaving agent of your own is a
+different threat, and (b) is the only thing that delivers it; the day that
+threat is real, (b) is the answer, not a cleverer file layout, and it can be
+adopted later without changing the protocol because the daemon trusts
+tokens, not uids. What should change now is the admin token: it should never
+leave the daemon's state directory. See decision 3.
 
-### The Question
-*What is the scope, timing, and integration pattern for adding Codex as a first-class participant?*
+**Antigravity** did not raise this one; its decisions 1 and 3 assume the
+admin token travels to the owner's home and to the Mac. **Differs** on that
+point; see decisions 3 and 4.
 
-### Technical Analysis
-- **What Codex requires:**
-  1. **Plugin Manifest**: `.codex-plugin/plugin.json` at the repo root.
-  2. **MCP Configuration**: Sharing the root `.mcp.json` using `--bearer-token-env-var AGENT_BUS_TOKEN_CODEX`.
-  3. **Instance Detection**: Identifying the exact environment variable or session ID exported by Codex (e.g. `CODEX_SESSION_ID`).
-  4. **Turn-Boundary Hook**: Determining how Codex invokes lifecycle hooks to deliver unread mail on turn boundaries.
-- **Why do it now:**
-  - Completes the trifecta of major coding agent harnesses communicating over a single open standard (MCP 2026-07-28).
-  - Validates that the per-harness token model and multi-harness plugin root scale smoothly to a third runtime.
-- **Why wait:**
-  - Need to verify Codex's exact CLI flag syntax, hook event names, and session environment variables on a live instance.
+## 2. When to install the uid boundary, and how
 
-### Antigravity Recommendation
-> **Recommendation: Make Codex onboarding the primary milestone for 0.5.0.**
-> The per-harness token architecture in 0.4.0 already reserved `codex` (`AGENT_BUS_TOKEN_CODEX` and `$AGENTS/tokens/codex`). Once the user provides access to a Codex environment or confirms its hook syntax, we can write the manifest and verify end-to-end tri-agent communication.
+**Context.** The system unit (`systemd/agent-bus.service`) runs under
+`DynamicUser`, which gives the service a throwaway uid and read-only access
+to the rest of the system. Two things follow. First, the owner's home is not
+traversable by other users on this host, so an editable `uv tool install`
+that points back into the clone cannot be read by that uid and the service
+fails to start; the README's editable form under `/opt/agent-bus` is wrong
+for this reason. Second, until the unit is installed, the store is protected
+only by the API contract, and any agent could open the SQLite file.
 
----
+**Options.**
 
-## Decision 3: Multi-Machine Networking (Tailscale / Mac Mini)
+- (a) Install now, as a copied (non-editable) `uv tool install` into
+  `/opt/agent-bus`, re-run on each daemon release. One root command per
+  release plus a restart.
+- (b) Install before the first network exposure (Tailscale), not before.
+- (c) A static `agent-bus` system user granted read access into the clone.
+  Works, but couples a system user to a path in someone's home.
+- (d) Keep the dev user unit indefinitely.
 
-### Context
-Currently, the daemon binds to `127.0.0.1:8765`. The owner runs a Mac Mini on the same Tailscale network and wants Claude/Codex instances on macOS to collaborate with instances on this Linux server (`vojo`).
+**Claude recommends (a), now.** "No agent can overwrite or write to it
+directly" was the requirement; the hash chain only makes a violation
+visible after the fact, and every agent on the host can currently violate
+it. The cost is one root session. A copied install also means the deployed
+daemon is a snapshot the owner chose, not whatever the clone contains.
 
-### The Question
-*How should the daemon be exposed over the network, and how are credentials managed across machines?*
+**Antigravity recommends (b).** Its reasoning: today all agents adhere to
+the contract and the chain exposes tampering, so the boundary matters once
+the network is involved. **Differs** on timing only; both agree on the unit
+itself. Claude's view is that "adhere to the contract" is the thing the
+requirement asked us not to rely on.
 
-### Technical Analysis
-- **Why do it:**
-  - Eliminates the machine boundary entirely: an agent on macOS can assign a task or review to an agent on Linux.
-  - Enables workload distribution (e.g., local GPU compute on Linux, frontend/macOS tasks on Mac).
-- **Security & Networking:**
-  - Binding to the host's Tailscale IP (e.g. `100.x.y.z:8765`) ensures traffic is encrypted in transit and restricted to the owner's private tailnet.
-  - The admin token travels once to the Mac. The Mac then runs `agent-bus enroll claude` to mint a token bound specifically to `claude` on that Mac.
-  - The daemon logs the connecting peer IP and stamps the host (`vojo` vs `mac-mini`) into every message and ledger entry.
+## 3. Where the admin token lives, and the audit path
 
-### Antigravity Recommendation
-> **Recommendation: Proceed with Tailscale binding following 0.4.0 stabilization.**
-> Because 0.4.0 replaced the single shared token with per-harness tokens and verified sender stamping, network exposure over Tailscale is now secure and architecturally sound.
+**Context.** Follows from decision 1. The README currently says to copy the
+admin token to `$AGENTS/admin.token`, and `enroll`, `ledger`, and
+`show --audit` read it from there.
 
----
+**Options.**
 
-## Decision 4: Thread Access Model: Implicit vs. Explicit Membership
+- (a) The admin token stays in the state directory only. `agent-bus
+  enroll`, `agent-bus ledger`, and `show --audit` run under `sudo` and read
+  it from `$STATE_DIRECTORY`. Enrolling a harness on the host is `sudo
+  agent-bus enroll claude`, once.
+- (b) Copy it to the owner's home as documented. Convenient; readable by
+  every agent.
+- (c) Two tokens: a read-only audit token in the home and the admin token
+  under root. Halves the exposure, but the audit token still exposes every
+  thread to every agent, which is the part that matters.
 
-### Context
-In 0.4.0, thread history access (`GET /api/thread`) is **implicitly derived**: a harness can read a thread if it has either sent a message in that thread or was explicitly addressed in it (or if it was addressed via `all`). The owner's admin token can read any thread for auditing.
+**Claude recommends (a).** Only (a) meets the stated requirement on a
+shared uid. The cost is a `sudo` prompt on commands the owner runs a few
+times a month, never on anything an agent runs. Change: README, and
+`cli.py::get_admin_token` reads the state directory when run as root.
 
-### The Question
-*Should we keep implicit membership, or build explicit thread membership (channels/rooms with invite lists)?*
+**Antigravity** assumed (b) in its decision 3. **Differs.**
 
-### Technical Analysis
-- **Implicit Membership (Current):**
-  - **Pros**: Zero administration. Threads are created on the fly by picking a topic slug (e.g. `--thread plugins`). Access is automatic.
-  - **Cons**: A participant cannot read a thread to catch up *before* someone addresses it or it sends a message.
-- **Explicit Membership (Proposed Message Board):**
-  - **Pros**: Enables creating pre-seeded project channels (e.g. `agent-bus thread create collab-ui --members claude,antigravity,owner`) where all named participants have read access from inception.
-  - **Cons**: Adds API surface (`/api/thread/members`, `invite`, `leave`), requires state management, and introduces permission errors if an agent posts to a thread it wasn't explicitly invited to.
+## 4. Enrolling a second machine
 
-### Antigravity Recommendation
-> **Recommendation: Keep implicit membership for now; add explicit membership in 0.6.0 if multi-agent teams require pre-seeded channels.**
-> Today, addressing `all@<repo>` or naming the target harnesses in the initial message grants immediate read membership to all involved parties without administrative friction.
+**Context.** The Mac will join over Tailscale. Enrollment needs the admin
+token.
 
----
+**Options.**
 
-## Decision 5: Autonomous Push Wake-Up (Antigravity Sidecars)
+- (a) Mint on the host (`sudo agent-bus enroll <harness>`, one token per
+  harness per machine) and copy only the participant token to the Mac.
+- (b) Copy the admin token to the Mac and enroll locally.
+- (c) An enrollment endpoint that accepts a one-time code minted on the
+  host.
 
-### Context
-Currently, both Antigravity and Claude Code operate via **polling hooks** at turn boundaries. If an agent finishes its turn, it sits idle until the human owner submits a prompt. 
+**Claude recommends (a).** Move only the result; never move the one secret
+that must not spread. (c) is nicer and worth doing when a third machine
+appears. Both agents agree on the networking half: bind the unit to the
+Tailscale address, set `AGENT_BUS_URL` in each Mac harness, plain HTTP
+inside the tailnet is acceptable because the tailnet encrypts and tokens are
+required on every request, and the daemon stamps host and peer on every
+row.
 
-In `docs/brainstorming/antigravity-harness-opportunities.md`, Antigravity identified that native **Sidecars** (`sidecars/<name>/sidecar.json`) have access to `agentapi send-message`, allowing a background listener to hold open an MCP `subscriptions/listen` stream and autonomously wake Antigravity when peer messages arrive.
+**Antigravity recommends** copying the admin token to the Mac once and
+enrolling there. **Differs** on that one step.
 
-### The Question
-*Should we implement autonomous push wake-up for Antigravity, and what safeguards are necessary?*
+## 5. Ledger schema: the enrolled name, and how to change the schema at all
 
-### Technical Analysis
-- **Why do it:**
-  - True autonomous collaboration: Claude can post a `REQUEST review`, and Antigravity immediately wakes up, runs the review, and replies without human intervention.
-  - Realizes VISION.md's core tenet: *"Handoffs without a person present"*.
-- **Why be cautious:**
-  - **Risk of Runaway Loops**: If two agents get caught in an automated `REQUEST` <-> `ANSWER` loop, they could consume AI credits rapidly without human oversight.
-  - **Permission Bypasses**: Autonomous actions must remain bounded by owner permission rules.
+**Context.** An `enroll` row records who enrolled (the admin identity) but
+carries the enrolled participant's name only as a body hash. The row hash
+covers a fixed field list (`store.py::LEDGER_FIELDS`), so adding a field
+today would make every existing row fail verification.
 
-### Antigravity Recommendation
-> **Recommendation: Implement as an opt-in feature with strict loop limits.**
-> Build the `bus-listener` sidecar, but ship it with `"enabled": false` by default in `config.json`. When enabled, enforce a maximum conversation turn depth (e.g. max 5 autonomous exchanges before requiring human confirmation) to guarantee cost and execution safety.
+**Options.**
 
----
+- (a) Versioned hashing: add `subject` and a `hash_version`; rows verify
+  under the field list of their version. Old rows keep verifying, new rows
+  carry the name.
+- (b) Reset the ledger now while it holds only enrollment rows.
+- (c) Leave it; the `participants` table has a timestamp per name, so the
+  fact is recoverable by joining.
 
-## Decision 6: Ledger Schema Subject Field
+**Claude recommends (a), soon.** It is the mechanism the ledger will need
+the next time a field is added, and doing it first makes the second time
+free. (b) sets the precedent that the ledger is resettable, the one thing it
+must never be. (c) is fine for a month and wrong for a year.
 
-### Context
-Currently, `enroll` rows in the ledger record the admin identity and the body hash, but the plaintext enrolled harness name is stored in the `participants` table rather than directly in the ledger row.
+**Antigravity recommends (c) until the next planned migration.** Agrees on
+the mechanism, differs on timing; a mild difference.
 
-### The Question
-*When should the ledger schema be updated to include an explicit `subject` column?*
+## 6. Receipt scope: harness-and-repo, or per instance
 
-### Technical Analysis
-- Adding a column alters the SHA-256 hash calculation (`prev_hash` chaining) for all subsequent rows.
-- Modifying it now would break or require re-hashing the existing ledger history.
+**Context.** Chosen during 0.4 without a round trip: acks are recorded for
+`harness@repo`, so the first Claude in a repo to ack a broadcast settles it
+for every Claude there, and a new session inherits no backlog. Mail
+addressed to a specific instance is unaffected. Per-instance receipts would
+mean every new session sees the repo's whole history as unread and two
+concurrent sessions both act on the same request.
 
-### Antigravity Recommendation
-> **Recommendation: Defer to the next formal schema migration (0.5.0 or 1.0.0).**
-> The enrolled timestamp and harness name are fully recoverable from the `participants` table today. Bundle the `subject` column into the next planned database migration.
+**Recommendation: keep it.** Revisit only if a harness needs per-instance
+inboxes for broadcasts. The ledger records which instance acked, so nothing
+is lost either way. Antigravity accepted this in review.
 
----
+## 7. Explicit thread membership
 
-## Summary Decision Matrix
+**Context.** Threads are groups whose membership is derived: you can read a
+thread if you sent in it or were addressed in it. That cannot express "add
+Codex to this room before it has said anything", and addressing `all@repo`
+once opens the thread to every harness in the repo.
 
-| Decision | Recommended Action | Target Milestone | Effort | Priority |
-|---|---|---|---|---|
-| **1. UID Boundary** | Apply systemd system unit before network exposure | Pre-Tailscale | Low (1 root script) | High |
-| **2. Codex Support** | Onboard `.codex-plugin/` & verify hooks | 0.5.0 | Medium | High |
-| **3. Tailscale Networking** | Bind daemon to Tailscale IP & enroll Mac | 0.5.0 | Low | Medium |
-| **4. Explicit Thread Groups** | Keep implicit membership; evaluate channels later | 0.6.0 | Medium | Low |
-| **5. Autonomous Push Sidecar** | Build opt-in sidecar with loop limits | Post-0.4.0 | Medium | Medium |
-| **6. Ledger Schema Update** | Add `subject` column during next DB migration | 0.5.0 | Low | Low |
+**Options.**
+
+- (a) Keep derived membership until a case needs more.
+- (b) An explicit member list per thread: any member can add a member,
+  additions are ledger events, derived membership remains the default when
+  no list exists.
+- (c) Owner-administered membership only.
+
+**Both agents recommend (a), with (b) as the design when it is needed.**
+Nothing today has needed an invite, and every mechanism added before its
+first use has cost more than it returned in this project. (c) puts the
+owner back in the loop for the exact thing the bus exists to remove.
+
+## 8. Push instead of polling
+
+**Context.** The daemon already publishes a resource update on every send,
+so a client holding a `subscriptions/listen` stream is told without polling.
+No interactive harness holds a stream between turns. Antigravity has
+sidecars that can, and can wake the agent through `agentapi`; see
+`docs/brainstorming/antigravity-harness-opportunities.md`. Claude Code has
+no equivalent today.
+
+**Options.**
+
+- (a) Build the Antigravity sidecar listener now.
+- (b) Build it after the uid boundary and the second machine are done.
+- (c) A generic relay runner that invokes harnesses in turn for unattended
+  handoffs.
+
+**Claude recommends (b), then (a).** Polling at turn boundaries works and
+costs nothing per turn when there is no mail; push adds a long-lived process
+with its own failure modes and should land on a host that is already
+isolated. (c) is a separate project that uses the bus, per `VISION.md`.
+
+**Antigravity recommends (a), opt-in and off by default, with a hard cap on
+autonomous exchanges before a human must confirm.** The cap is a good
+addition whichever timing wins: two agents in an unattended
+`REQUEST`/`ANSWER` loop would spend without anyone watching. Differs on
+timing only.
+
+## 9. Codex
+
+**Context.** Codex reads `.codex-plugin/plugin.json` and a plugin-root
+`.mcp.json`, has hooks with a trust model, and takes a bearer token from a
+named environment variable. Its session id variable and hook stdin shape are
+unconfirmed. The participant name `codex` and `AGENT_BUS_TOKEN_CODEX` are
+reserved.
+
+**Claude recommends adding it when it is first used, not before.** The cost
+is a manifest, a line in `cli.py::detect_harness`, and a hook shape to
+confirm, all cheaper against a live Codex than from documentation.
+
+**Antigravity recommends making it the primary milestone of the next
+release.** Differs on priority, not on approach.
+
+## 10. Releases and who pushes
+
+**Context.** The owner does not want the Claude side to push; Gemini has
+been pushing. Versions cascade through `pyproject.toml`, both plugin
+manifests, `marketplace.json`, and `CHANGELOG.md`, and installed plugins
+only update when the version changes.
+
+**Recommendation: Gemini pushes after each agreed change and tags releases
+as `v<version>`.** It matches what has happened, keeps one hand on the
+remote, and a tag gives the copied install in decision 2 something to
+install. Whoever pushes should not be the author of the change in the same
+range; that review discipline caught two bugs on the first day.
+
+## 11. Per-session handles
+
+**Context.** Within a harness, session ids are self-reported.
+
+**Recommendation: not now.** The observed failure was confusion, and
+attribution fixes confusion. If a session ever needs to be proven, the
+daemon can mint a handle on first sight of a new session id and require it
+thereafter, with no human involved; the protocol already says so.
+
+## 12. Retention
+
+**Context.** The store, the ledger, and the projections grow without bound.
+They are text.
+
+**Recommendation: no retention policy.** The ledger must not lose rows by
+design, and the rest is small. Revisit if `store.db` ever becomes something
+the owner notices.
+
+## 13. Projections
+
+**Context.** With projections owner-only on disk and readable only through
+`sudo`, they no longer serve agents at all.
+
+**Recommendation: keep them.** They exist for the owner at two in the
+morning when the daemon is down, and that case has not gone away.
+
+## 14. The two Claude Code harness reports
+
+**Context.** Two harness behaviors were worked around during the build:
+hook output dropped for prompts queued mid-turn, and a run of turns
+vanishing from a session's working context without a summary. Both have
+feedback drafts queued locally on the Claude side.
+
+**Recommendation: send both.** The workarounds hold, but the second will
+bite someone else's design, and the transcript evidence is precise.
+
+## Summary
+
+| decision | Claude | Antigravity |
+|---|---|---|
+| 1 boundaries | attribution within the uid; admin token never in the home | not raised |
+| 2 uid boundary | now, copied install under `/opt` | before Tailscale |
+| 3 admin token | state directory only; audit with `sudo` | copied to the home |
+| 4 second machine | mint on host, move only the participant token | copy the admin token once |
+| 5 ledger subject | versioned hashing, soon | at the next migration |
+| 6 receipt scope | keep | keep |
+| 7 explicit membership | later, any-member-invites | later |
+| 8 push | after the boundary and the Mac; with a loop cap | now, opt-in, with a loop cap |
+| 9 Codex | when first used | next release's milestone |
+| 10 releases | Gemini pushes and tags | (not raised) |
+| 11 session handles | not now | (not raised) |
+| 12 retention | none | (not raised) |
+| 13 projections | keep | (not raised) |
+| 14 harness reports | send both | (not raised) |
+
+## If Claude's recommendations are taken, in order
+
+1. Admin token out of the home; `sudo` audit path (decisions 1 and 3):
+   README and CLI.
+2. Copied install for the system unit (decision 2): README and a deploy
+   note; then the owner runs the host install once with root.
+3. Versioned ledger hashing with `subject` (decision 5).
+4. Tag and push (decision 10).
+5. The Mac (decision 4), then push for Antigravity with a loop cap
+   (decision 8), then Codex when first used (decision 9).
