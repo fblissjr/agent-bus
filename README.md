@@ -1,16 +1,23 @@
+<p align="center">
+  <img src="assets/agent-bus-banner.jpg" alt="Agent Bus Banner" width="100%">
+</p>
+
 # agent-bus
 
-A message bus for coding agents. One small daemon lets Claude Code,
-Antigravity (Gemini), Codex, or any other harness that speaks MCP or HTTP
-leave messages for each other, across repos and across machines, so the
-person running them stops being the copy-paste relay.
+A message bus for agents, and for anything else that can hold up its end of
+a small protocol. One daemon lets participants leave messages for each other
+across repos and, later, across machines, so the person running them stops
+being the relay.
 
-It is agent-agnostic and instance-agnostic: several instances of the same
-agent can be on the bus at once, in different repos, and each keeps its own
-read receipts.
+Today the participants are Claude Code and Antigravity (Gemini) on one
+machine. Nothing in the protocol knows that. A participant is anything that
+can make an HTTP request or speak MCP and follows the address and envelope
+rules in [PROTOCOL.md](PROTOCOL.md): another agent harness, a script, a CI
+job, a person at a terminal. Several instances of one agent can be on the
+bus at once, each with its own read receipts.
 
-The protocol both agents agreed to is [PROTOCOL.md](PROTOCOL.md). It is the
-authority; this README is the setup guide.
+`PROTOCOL.md` is the authority. This README is the setup guide. Where this
+is headed, and what it will not become, is in [VISION.md](VISION.md).
 
 ## How it works
 
@@ -24,9 +31,11 @@ authority; this README is the setup guide.
 - Two MCP resources: `agent-bus://protocol` (the rules, served through the
   connection) and `agent-bus://inbox/{address}` (an address's unread mail,
   subscribable for push via `subscriptions/listen`).
-- Agents only exist during a turn, so each harness runs a hook at session
-  start and at each turn that injects unread mail into context and acks it.
-  The `agent-bus hook` subcommand is that bridge.
+- An interactive agent only exists during a turn, so its harness runs a
+  hook at session start and at each turn that injects unread mail into
+  context and acks it. The `agent-bus hook` subcommand is that bridge. A
+  participant that stays running can instead hold a `subscriptions/listen`
+  stream and be told.
 - Addresses are `<agent>[@<repo>][#<instance>]`, matched by prefix. `repo`
   is the checkout directory's basename, so it is the same on every machine.
 
@@ -66,7 +75,7 @@ this repo's copy:
 ln -sf "$(pwd)/PROTOCOL.md" "$AGENTS/PROTOCOL.md"
 ```
 
-## Connect an agent
+## Connect a participant
 
 Every client needs the URL and the bearer token from `$AGENTS/auth.token`.
 Copy the token to any other machine that connects.
@@ -112,9 +121,11 @@ The hook reads `workspacePaths` from stdin to derive the repo name.
 
 ### Anything else
 
-Add the MCP URL with the bearer header, read `agent-bus://protocol`, and wire
-a turn-boundary hook that runs `agent-bus inbox --me <agent>@<repo> --ack`
-and prints the result. That is the whole onboarding.
+For another agent harness: add the MCP URL with the bearer header, read
+`agent-bus://protocol`, and wire a turn-boundary hook that runs
+`agent-bus inbox --me <agent>@<repo> --ack` and prints the result. For a
+script or a CI job: `agent-bus send` and `agent-bus inbox` are enough, or
+POST to `/api/` directly. That is the whole onboarding.
 
 ## The CLI
 

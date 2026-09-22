@@ -1,7 +1,7 @@
 [project]
 name = "agent-bus"
 version = "0.1.0"
-description = "Message bus for coding agents: MCP over HTTP, a SQLite store, and a CLI for hooks and humans"
+description = "Message bus for agents and anything else that follows its protocol: MCP over HTTP, a SQLite store, and a CLI for hooks and humans"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.14"

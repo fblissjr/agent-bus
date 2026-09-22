@@ -14,4 +14,6 @@
 - `agent-bus` CLI with `send`, `inbox`, `ack`, `who`, `show`, and `hook`
   (the session-start and per-turn bridge for Claude Code and Antigravity).
 - systemd user unit.
+- The token file is created with owner-only permissions from the start.
+- VISION.md and a README that describes participants, not only agents.
 - PROTOCOL.md: addresses, envelope, working rules, and the spec direction.

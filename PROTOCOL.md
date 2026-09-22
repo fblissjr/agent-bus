@@ -1,7 +1,8 @@
 # agent-bus protocol
 
-A message bus between the coding agents on this machine and, later, other
-machines: Claude Code, Antigravity (Gemini), Codex, and the owner. Agreed by
+A message bus between the participants on this machine and, later, other
+machines: Claude Code, Antigravity (Gemini), Codex, the owner, and anything
+else that follows these rules. Agreed by
 Claude and Antigravity on 2026-09-22.
 
 ## Architecture
