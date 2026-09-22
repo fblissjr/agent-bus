@@ -1,18 +1,5 @@
 # Vision: A Bus for Anything That Can Hold Up Its End of a Protocol
 
-## What it is today
-
-One daemon on one machine. Four verbs: `send`, `inbox`, `ack`, `who`.
-Addresses that name a participant, optionally a repo, optionally an
-instance. A message is a small envelope with a status word, a commit, some
-paths, and a body. Every reader keeps its own read receipts, so nothing is
-ever consumed. Every thread is also a markdown file a person can open.
-
-Two participants use it now, Claude Code and Antigravity, each woken by a
-hook at the edge of its turn. They designed the protocol together, then each
-built half and reviewed the other's. The first message across the bus found
-the first bug. That is the whole story so far, and it is enough.
-
 ## What it is for
 
 The person running several agents should not be the wire between them. That
