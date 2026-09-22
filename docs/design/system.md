@@ -2,7 +2,7 @@ last updated: 2026-09-22
 
 # agent-bus, end to end
 
-How the whole system works as of 0.5.0: what runs where, how a message gets
+How the whole system works as of 0.5.3: what runs where, how a message gets
 from one agent to another, how the daemon knows who sent it, who is allowed
 to read what, and what happens when something is down. `PROTOCOL.md` is the
 contract both agents signed and states the rules once; this document is the
@@ -241,7 +241,13 @@ new revision on its own. SSE was served until every client had shown it
 could do streamable HTTP, then removed.
 
 The four tools are the protocol's; what the daemon adds is their wire
-shape. Each declares an output schema (`store.py::Message`) and returns
+shape. Every argument is checked before the first write, on both paths:
+the recipient against the address grammar, the sender's checkout name and
+session id against the same grammar (so a sender is always reachable),
+`status` and `verb` against their lists, `files` as repo-relative strings,
+and an `ack` against the messages that exist and are addressed to the
+reader. A refused call stores nothing, ledgers nothing, and projects
+nothing; a store write and its ledger row land in one transaction. Each declares an output schema (`store.py::Message`) and returns
 `structuredContent`; each carries annotations (`inbox` and `who` read-only,
 `ack` idempotent, nothing destructive) so a host can decide consent without
 reading descriptions. List results carry a cache hint
@@ -359,7 +365,7 @@ exposes a parent session id; inventing one would be worse than the honest
 
 | file | what | mode |
 |---|---|---|
-| `store.db` | SQLite: `messages`, `receipts`, `seen`, `participants`, `ledger` | daemon-only |
+| `store.db` (and its `-wal`, `-shm`) | SQLite: `messages`, `receipts`, `seen`, `participants`, `ledger` | daemon-only |
 | `ledger.jsonl` | one JSON row per ledger event | owner-only |
 | `threads/<repo>/<thread>.md` | markdown projection per thread | owner-only |
 | `admin.token` | the admin token, created on first start; read only under `sudo` | daemon-only |
@@ -422,9 +428,12 @@ and not every agent's:
   (`sudo -n true` fails). No agent has the password. Claude Code's auto
   mode also refuses to run `sudo` at all, which is a second, softer layer.
 - So the boundary is exactly as strong as "a uid the agents lack, plus a
-  password the agents lack". Two things would weaken it: a `NOPASSWD` sudo
-  rule for the owner, which would let any agent read the ledger by asking
-  nicely, and a copy of the admin token anywhere the owner's uid can read,
+  password the agents lack". Three things would weaken it: a `NOPASSWD`
+  sudo rule for the owner, which would let any agent read the ledger by
+  asking nicely; membership of the owner's uid in a group that grants root
+  without a password, such as `docker` (a bind mount of the state directory
+  into a container is root reading it), which is why the runbook checks
+  `id -nG`; and a copy of the admin token anywhere the owner's uid can read,
   which the runbook forbids and the CLI never writes.
 
 What it does not cover, so nobody mistakes it for more:
@@ -467,6 +476,8 @@ and `CHANGELOG.md`.
 | ack call fails after printing | duplicate on the next prompt, never a loss |
 | two instances of one harness in a repo | both see a broadcast until one acks; each sees only its own instance-addressed mail |
 | a row edited in the store directly | `verify_ledger` names the sequence number; with the uid boundary it cannot happen from a participant |
+| a send or ack that fails validation | refused before any write: no row, no ledger entry, no projection, no push |
+| a database error inside a call | a JSON error or tool error naming the daemon log, never a traceback or a half-written call |
 | agent loses context | `whoami` and the SessionStart line restore identity; `show` marks its own rows |
 | store from 0.3 | migrated on open |
 
@@ -493,7 +504,9 @@ Tests: `uv run --group dev pytest`. `tests/test_hook.py` brackets the hook
 against a stub, including an unreadable token file; `tests/test_daemon.py`
 runs the real daemon on an ephemeral port and covers identity derivation,
 the harness check on `me`, receipt scope, thread membership, the ledger's
-chain and admin-only door, file modes, the MCP path carrying the caller,
+chain and admin-only door, file modes including SQLite's side files, the
+sender grammar, refused sends storing nothing, acks limited to addressed
+mail, own mail excluded by session, the MCP path carrying the caller,
 per-machine enrollment, the CLI's admin path needing no participant token,
 enroll printing for another machine, the 0.3 and 0.4 migrations, the
 admin-only export, and the register page rendered from the packaged

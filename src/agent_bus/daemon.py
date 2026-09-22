@@ -17,6 +17,7 @@ import logging
 import os
 import secrets
 import socket
+import sqlite3
 from contextvars import ContextVar
 from importlib.resources import files
 from pathlib import Path
@@ -106,10 +107,15 @@ def participant(instance=None):
 
 
 def guarded(fn, *args, **kwargs):
+    """Validation failures become tool errors carrying the store's message; a database
+    error becomes a tool error too, never a traceback or a half-answered call."""
     try:
         return fn(*args, **kwargs)
     except ValueError as e:
         raise ToolError(str(e)) from e
+    except sqlite3.Error as e:
+        log.error("store error: %s", e)
+        raise ToolError("store error; see the daemon log") from e
 
 
 def build_server(store):
@@ -145,7 +151,7 @@ def build_server(store):
     @server.tool(annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
     async def who() -> list[Reader]:
         """Instances active within ACTIVE_WINDOW (see agent_bus.store), with harness and host."""
-        return store.who()
+        return guarded(lambda: (participant(), store.who())[1])
 
     @server.resource("agent-bus://protocol", mime_type="text/markdown", description="The bus protocol: addresses, envelope, working rules.")
     def protocol() -> str:
@@ -167,6 +173,9 @@ def build_server(store):
                 return JSONResponse(await fn(request))
             except (ValueError, KeyError, TypeError) as e:
                 return JSONResponse({"error": str(e)}, status_code=400)
+            except sqlite3.Error as e:
+                log.error("store error: %s", e)
+                return JSONResponse({"error": "store error; see the daemon log"}, status_code=500)
         return endpoint
 
     @server.custom_route("/api/enroll", methods=["POST"])
@@ -209,6 +218,7 @@ def build_server(store):
     @server.custom_route("/api/who", methods=["GET"])
     @api
     async def api_who(request):
+        participant()
         return store.who()
 
     @server.custom_route("/api/thread", methods=["GET"])

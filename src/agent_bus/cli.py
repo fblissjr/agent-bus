@@ -213,13 +213,15 @@ def cmd_send(args):
     sha = args.sha if args.sha is not None else detect_sha()
     thread = args.thread
     if not thread:
+        # A person at a terminal is asked; a process (every agent) must say which thread,
+        # because a silent default would pile unrelated topics into one thread.
         if sys.stdin.isatty():
             try:
-                thread = input("Thread slug [general]: ").strip() or "general"
+                thread = input("Thread slug: ").strip()
             except (EOFError, KeyboardInterrupt):
                 sys.exit(1)
-        else:
-            thread = "general"
+        if not thread:
+            raise BusError("--thread is required: one slug per topic (see PROTOCOL.md)")
     body = args.body
     if not body:
         if not sys.stdin.isatty():
@@ -440,7 +442,7 @@ def main():
     p_send.add_argument("--verb", choices=["review", "implement", "test", "answer"], help="Action verb for REQUEST")
     p_send.add_argument("--sha", help="Git commit SHA (default: HEAD)")
     p_send.add_argument("--files", help="Comma-separated repo-relative file paths")
-    p_send.add_argument("--thread", help="Thread slug (prompts if interactive, default: general)")
+    p_send.add_argument("--thread", help="Thread slug, one per topic (required; prompted for at a terminal)")
     p_send.add_argument("--json", action="store_true", help="Output JSON response")
     p_send.set_defaults(func=lambda a: (setattr(a, "body", a.body_flag or a.body), cmd_send(a)))
 

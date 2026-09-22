@@ -292,3 +292,80 @@ def test_mcp_tools_carry_the_caller(bus):
     asyncio.run(go())
     code, out = bus.call("GET", "/api/ledger", ADMIN)
     assert [r["instance"] for r in out["rows"] if r["event"] == "send"] == ["m1", None]
+
+
+def test_sender_components_must_fit_the_address_grammar(bus):
+    """A sender is always reachable and parseable: a checkout name or a reported session id
+    that would not fit the grammar is refused before anything is stored."""
+    claude = bus.enroll("claude")
+    for meta in ({"cwd": "/Users/me/My Repo"}, {"cwd": "/x/a@b"}, {"instance": "a#b c"}):
+        code, out = bus.call("POST", "/api/send", claude, {"to": "all", "repo": "r", "status": "FYI", "body": "x", "thread": "t"}, **meta)
+        assert code == 400 and "bad" in out["error"], (meta, out)
+    assert bus.call("GET", "/api/thread?repo=r&thread=t", ADMIN)[1] == []
+    assert [r["event"] for r in bus.call("GET", "/api/ledger", ADMIN)[1]["rows"]] == ["enroll"]
+
+
+def test_refused_send_stores_nothing(bus):
+    """Validation runs before the first write, so a rejected send leaves no message, no
+    ledger row, and no projection."""
+    claude = bus.enroll("claude")
+    bad = (
+        {"files": ["src/x.py", 42]},
+        {"files": ["/etc/passwd"]},
+        {"status": "REQUEST", "verb": "deploy"},
+        {"body": "   "},
+    )
+    for extra in bad:
+        payload = {"to": "all", "repo": "r", "status": "FYI", "body": "partial", "thread": "t", **extra}
+        assert bus.call("POST", "/api/send", claude, payload)[0] == 400, extra
+    assert bus.call("GET", "/api/thread?repo=r&thread=t", ADMIN)[1] == []
+    assert [r["event"] for r in bus.call("GET", "/api/ledger", ADMIN)[1]["rows"]] == ["enroll"]
+    assert not (bus.state / "threads" / "r" / "t.md").exists()
+
+
+def test_ack_only_what_exists_and_is_addressed_to_you(bus):
+    claude, anti = bus.enroll("claude"), bus.enroll("antigravity")
+    code, private = bus.call("POST", "/api/send", anti, {"to": "codex@r", "repo": "r", "status": "FYI", "body": "not for claude", "thread": "t"})
+    code, mine = bus.call("POST", "/api/send", anti, {"to": "claude@r", "repo": "r", "status": "FYI", "body": "for claude", "thread": "t"})
+    code, out = bus.call("POST", "/api/ack", claude, {"me": "claude@r#s1", "ids": [999]})
+    assert code == 400 and "999" in out["error"]
+    code, out = bus.call("POST", "/api/ack", claude, {"me": "claude@r#s1", "ids": [private["id"]]})
+    assert code == 400 and str(private["id"]) in out["error"]
+    code, out = bus.call("POST", "/api/ack", claude, {"me": "claude@r#s1", "ids": [mine["id"], private["id"]]})
+    assert code == 400  # one refused id refuses the whole call; nothing is half-acked
+    assert bus.call("POST", "/api/ack", claude, {"me": "claude@r#s1", "ids": [mine["id"]]}) == (200, {"acked": 1})
+    assert bus.call("POST", "/api/ack", claude, {"me": "claude@r#s1", "ids": ["x"]})[0] == 400
+    assert bus.call("POST", "/api/ack", claude, {"me": "claude@r#s1", "ids": []})[0] == 400
+    acks = [r for r in bus.call("GET", "/api/ledger", ADMIN)[1]["rows"] if r["event"] == "ack"]
+    assert [r["message_id"] for r in acks] == [mine["id"]]
+
+
+def test_own_mail_is_excluded_by_session_not_checkout(bus):
+    """A session that sends to its own harness from one checkout does not find that message
+    waiting for it in another checkout; a different session of the same harness does."""
+    claude = bus.enroll("claude")
+    bus.call("POST", "/api/send", claude, {"to": "claude", "repo": "agent-bus", "status": "FYI", "body": "from A", "thread": "x"}, instance="s1", cwd="/w/agent-bus")
+    assert bus.call("POST", "/api/inbox", claude, {"me": "claude@other#s1"}, instance="s1", cwd="/w/other")[1] == []
+    assert [m["body"] for m in bus.call("POST", "/api/inbox", claude, {"me": "claude@other#s2"}, instance="s2", cwd="/w/other")[1]] == ["from A"]
+
+
+def test_admin_token_takes_no_part_in_presence(bus):
+    code, out = bus.call("GET", "/api/who", ADMIN)
+    assert code == 400 and "admin" in out["error"]
+
+
+def test_sqlite_side_files_are_owner_only(bus):
+    claude = bus.enroll("claude")
+    bus.call("POST", "/api/send", claude, {"to": "all", "repo": "r", "status": "FYI", "body": "one", "thread": "t"})
+    for name in ("store.db-wal", "store.db-shm"):
+        p = bus.state / name
+        assert p.exists() and stat.S_IMODE(p.stat().st_mode) == 0o600, name
+
+
+def test_cli_send_needs_a_thread_when_not_interactive(bus, tmp_path):
+    claude = bus.enroll("claude")
+    r = cli(bus, ["send", "--to", "all", "--status", "FYI", "hello"], tmp_path, token_env={"AGENT_BUS_TOKEN_OWNER": claude, "AGENT_BUS_HARNESS": "claude", "AGENT_BUS_TOKEN_CLAUDE": claude})
+    assert r.returncode != 0 and "--thread" in r.stderr.decode()
+    assert bus.call("GET", "/api/ledger", ADMIN)[1]["rows"][-1]["event"] == "enroll"
+    r = cli(bus, ["send", "--to", "all", "--status", "FYI", "--thread", "t", "hello"], tmp_path, token_env={"AGENT_BUS_HARNESS": "claude", "AGENT_BUS_TOKEN_CLAUDE": claude})
+    assert r.returncode == 0, r.stderr

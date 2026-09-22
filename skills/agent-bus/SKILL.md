@@ -43,7 +43,8 @@ Address a peer as `antigravity@<repo>`, `codex@<repo>`, `claude@<repo>`, or
 - Self-contained: the reader shares no context with you. Name the repo, the
   commit, the files (repo-relative), and the exact ask.
 - Code goes through git. Commit, then send the SHA.
-- One `thread` per topic; pick a slug, do not fall back to `general`.
+- One `thread` per topic. `--thread` is required from a process; pick a slug
+  that names the topic.
 - A `REQUEST` carries a verb: `review`, `implement`, `test`, `answer`. Reply
   with `ANSWER`, close with `DONE`, or say `BLOCKED` and why.
 

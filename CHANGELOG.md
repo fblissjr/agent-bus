@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.3
+
+- The daemon validates every argument before its first write, on the MCP
+  and `/api/` paths alike: the sender's checkout name and session id must
+  fit the address grammar like a recipient's, `verb` is one of the four,
+  `files` are repo-relative strings, and an `ack` is accepted only for
+  messages that exist and are addressed to the reader. A refused call
+  stores nothing, ledgers nothing, and projects nothing.
+- A message, a receipt, or an enrollment and its ledger row land in one
+  transaction. A database error inside a call is a JSON error or a tool
+  error, never a traceback.
+- Own mail is excluded from the inbox by harness and session id, so a
+  message a session sent from one checkout does not wait for it in another.
+- The admin token takes no part in presence. Every file the daemon creates,
+  including SQLite's write-ahead log and shared-memory files, is owner-only.
+- `agent-bus send` requires `--thread`; a terminal is prompted, a process is
+  refused, so nothing lands in `general` by omission.
+- The cutover runbook and the design doc's sudo section check the owner's
+  group membership beside the sudo prompt; README describes matching by
+  component and the per-harness ack rule.
+
 ## 0.5.2
 
 - `(you)` and `(another <harness>)` match on harness and session id, not on

@@ -36,6 +36,7 @@ from urllib.parse import quote
 DEFAULT_STATE_DIR = Path.home() / ".agents"
 
 STATUSES = ("REQUEST", "ANSWER", "DONE", "BLOCKED", "FYI")
+VERBS = ("review", "implement", "test", "answer")
 DEFAULT_THREAD = "general"
 DEFAULT_INSTANCE = "default"
 # An instance counts as active in who() if it called any tool within this window.
@@ -138,9 +139,11 @@ class Identity:
     machine: str | None = None
 
     def address(self, repo):
-        """The derived sender address. The caller's own checkout wins over the message's repo."""
-        own = Path(self.cwd).name if self.cwd else repo
-        return f"{self.harness}@{own}#{self.instance or DEFAULT_INSTANCE}"
+        """The derived sender address. The caller's own checkout wins over the message's repo.
+        Every component obeys the address grammar, so a sender is always reachable and parseable:
+        a checkout name or a reported session id that would not fit is refused, not stored."""
+        own = check_slug("checkout name", Path(self.cwd).name) if self.cwd else repo
+        return f"{self.harness}@{own}#{check_slug('instance', self.instance or DEFAULT_INSTANCE)}"
 
 
 def now():
@@ -205,6 +208,9 @@ def locked(fn):
 
 class Store:
     def __init__(self, state_dir=DEFAULT_STATE_DIR):
+        # Everything this process creates is owner-only from the first byte, including the
+        # SQLite write-ahead log and shared-memory files, which SQLite creates with the umask.
+        os.umask(0o077)
         self.state_dir = Path(state_dir)
         self.state_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(self.state_dir, 0o700)
@@ -254,8 +260,14 @@ class Store:
             raise ValueError(f"bad participant name {name!r}")
         check_slug("machine", machine)
         token = secrets.token_urlsafe(32)
-        self.db.execute("INSERT INTO participants (name, machine, token_hash, ts) VALUES (?, ?, ?, ?) ON CONFLICT(name, machine) DO UPDATE SET token_hash = excluded.token_hash, ts = excluded.ts", (name, machine, token_hash(token), now()))
-        self.record("enroll", identity, subject=f"{name}@{machine}")
+        self.db.execute("BEGIN")
+        try:
+            self.db.execute("INSERT INTO participants (name, machine, token_hash, ts) VALUES (?, ?, ?, ?) ON CONFLICT(name, machine) DO UPDATE SET token_hash = excluded.token_hash, ts = excluded.ts", (name, machine, token_hash(token), now()))
+            self.record("enroll", identity, subject=f"{name}@{machine}")
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
         return token
 
     @locked
@@ -276,23 +288,38 @@ class Store:
 
     @locked
     def send(self, identity, to, repo, status, body, verb=None, sha=None, files=None, thread=None):
+        # Everything is checked before the first write: a refused send stores nothing,
+        # ledgers nothing, and projects nothing.
         to_agent, to_repo, to_instance = parse_address(to)
         check_slug("repo", repo)
         thread = check_slug("thread", thread or DEFAULT_THREAD)
         if status not in STATUSES:
             raise ValueError(f"bad status {status!r}: one of {', '.join(STATUSES)}")
-        if not body or not body.strip():
+        if verb is not None and verb not in VERBS:
+            raise ValueError(f"bad verb {verb!r}: one of {', '.join(VERBS)}")
+        if sha is not None and not isinstance(sha, str):
+            raise ValueError("sha must be a string")
+        if not isinstance(body, str) or not body.strip():
             raise ValueError("body is empty")
         files = list(files or [])
+        for f in files:
+            if not isinstance(f, str) or not f.strip() or f.startswith("/") or f.startswith("~") or "\n" in f:
+                raise ValueError(f"bad file path {f!r}: repo-relative paths only")
         sender = identity.address(repo)
-        cur = self.db.execute(
-            "INSERT INTO messages (ts, sender, harness, recipient, to_agent, to_repo, to_instance, repo, thread, status, verb, sha, files, body)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (now(), sender, identity.harness, to, to_agent, to_repo, to_instance, repo, thread, status, verb, sha, json.dumps(files), body),
-        )
-        self.touch(identity, sender)
-        msg = self._get(cur.lastrowid)
-        self.record("send", identity, message_id=msg["id"], body=body, subject=to)
+        self.db.execute("BEGIN")
+        try:
+            cur = self.db.execute(
+                "INSERT INTO messages (ts, sender, harness, recipient, to_agent, to_repo, to_instance, repo, thread, status, verb, sha, files, body)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (now(), sender, identity.harness, to, to_agent, to_repo, to_instance, repo, thread, status, verb, sha, json.dumps(files), body),
+            )
+            self.touch(identity, sender)
+            msg = self._get(cur.lastrowid)
+            self.record("send", identity, message_id=msg["id"], body=body, subject=to)
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
         self.project(msg)
         return msg
 
@@ -309,22 +336,46 @@ class Store:
             SELECT + " m WHERE (to_agent = ? OR to_agent = 'all')"
             " AND (to_repo IS NULL OR to_repo = ?)"
             " AND (to_instance IS NULL OR to_instance = ?)"
-            " AND sender != ?"
+            " AND NOT (harness = ? AND substr(sender, instr(sender, '#') + 1) = ?)"
             " AND NOT EXISTS (SELECT 1 FROM receipts r WHERE r.message_id = m.id AND r.reader = ?)"
             " ORDER BY id",
-            (agent, repo, instance, me, receipt_scope(me)),
+            (agent, repo, instance, agent, instance or DEFAULT_INSTANCE, receipt_scope(me)),
         ).fetchall()
         return [row_to_message(r) for r in rows]
 
     @locked
     def ack(self, identity, me, ids):
+        """Record receipts for `me`. Only messages that exist and are addressed to `me` can be
+        acked; anything else is refused before any write, so a receipt is always a real read."""
         self.own_address(identity, me)
+        agent, repo, instance = parse_address(me)
+        try:
+            ids = sorted({int(i) for i in ids})
+        except (TypeError, ValueError):
+            raise ValueError("ids must be integers")
+        if not ids:
+            raise ValueError("no message ids given")
+        marks = ", ".join("?" * len(ids))
+        addressed = {r[0] for r in self.db.execute(
+            f"SELECT id FROM messages WHERE id IN ({marks}) AND (to_agent = ? OR to_agent = 'all')"
+            " AND (to_repo IS NULL OR to_repo = ?) AND (to_instance IS NULL OR to_instance = ?)",
+            (*ids, agent, repo, instance),
+        )}
+        refused = [i for i in ids if i not in addressed]
+        if refused:
+            raise ValueError(f"not addressed to {me}, or no such message: {', '.join(map(str, refused))}")
         self.touch(identity, me)
         ts = now()
         scope = receipt_scope(me)
-        self.db.executemany("INSERT OR IGNORE INTO receipts (message_id, reader, ts) VALUES (?, ?, ?)", [(int(i), scope, ts) for i in ids])
-        for i in ids:
-            self.record("ack", identity, message_id=int(i), subject=scope)
+        self.db.execute("BEGIN")
+        try:
+            self.db.executemany("INSERT OR IGNORE INTO receipts (message_id, reader, ts) VALUES (?, ?, ?)", [(i, scope, ts) for i in ids])
+            for i in ids:
+                self.record("ack", identity, message_id=i, subject=scope)
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
         return len(ids)
 
     @locked
@@ -351,7 +402,10 @@ class Store:
     # ledger
 
     def record(self, event, identity, message_id=None, body=None, subject=None):
-        """Append one hash-chained row. Callers hold the lock, so seq and prev_hash are consistent."""
+        """Append one hash-chained row. Callers hold the lock and an open transaction, so seq
+        and prev_hash are consistent and the row lands with the event it records or not at all.
+        The jsonl projection is appended inside that window; a crash between the two leaves the
+        table authoritative and the projection one row short, never the reverse."""
         last = self.db.execute("SELECT seq, hash FROM ledger ORDER BY seq DESC LIMIT 1").fetchone()
         row = {
             "seq": (last[0] + 1) if last else 1, "ts": now(), "event": event, "harness": identity.harness, "instance": identity.instance,

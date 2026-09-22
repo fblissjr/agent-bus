@@ -26,7 +26,12 @@ would have failed silently; all are in the design doc's operations section.
 
 0.5.1 added `agent-bus register` over an admin-only `GET /api/export`, the
 sudo explanation, and the identity-hardening and rooms designs. 0.5.2 made
-`(you)` match on harness and session id rather than on the checkout.
+`(you)` match on harness and session id rather than on the checkout. 0.5.3
+made the daemon validate everything before the first write (sender grammar,
+verb, files, acks limited to addressed mail), keep each write and its
+ledger row in one transaction, exclude own mail by session, and create
+every state file owner-only; the CLI requires `--thread`; the runbook and
+the design doc check group membership beside the sudo prompt.
 
 The mechanism is `docs/design/system.md`; the host step is the runbook
 below, still the owner's to run.

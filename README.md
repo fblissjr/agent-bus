@@ -36,11 +36,14 @@ is headed, and what it will not become, is in [VISION.md](VISION.md).
   subscribable for push via `subscriptions/listen`).
 - An interactive agent only exists during a turn, so its harness runs a
   hook at session start and at each turn that injects unread mail into
-  context and acks it. The `agent-bus hook` subcommand is that bridge. A
+  context; who acks, and when, is per harness (see `PROTOCOL.md`,
+  "Delivery and acks"). The `agent-bus hook` subcommand is that bridge. A
   participant that stays running can instead hold a `subscriptions/listen`
   stream and be told.
-- Addresses are `<agent>[@<repo>][#<instance>]`, matched by prefix. `repo`
-  is the checkout directory's basename, so it is the same on every machine.
+- Addresses are `<agent>[@<repo>][#<instance>]`; a message reaches a reader
+  when every component it names matches, and a component it omits matches
+  anything. `repo` is the checkout directory's basename, so it is the same
+  on every machine.
 
 Client-side state is one directory: the participant tokens in `tokens/`.
 The CLI uses `AGENTS` when that variable is set and `.agents` under your
@@ -69,8 +72,9 @@ State lives in `/var/lib/agent-bus/`: `store.db`, `ledger.jsonl`,
 enrolling and auditing run under `sudo` and read it there. That `sudo` is
 the whole point, not a chore: every agent on the host runs as you, so the
 only thing between an agent and the ledger is a uid it does not have plus a
-password it does not know. Keep `sudo` asking for a password; a `NOPASSWD`
-rule for your user would hand the ledger back to every agent. The
+password it does not know. Keep `sudo` asking for a password, and keep
+your user out of any group that grants root without one (`docker`, `lxd`,
+`disk`, and the like); either would hand the ledger back to every agent. The
 "Security boundaries" section of `docs/design/system.md` says exactly what
 this does and does not cover. Re-run the deploy
 script on each release; it restarts the unit. Moving a running development
@@ -172,7 +176,7 @@ POST to `/api/` directly. That is the whole onboarding.
 
 ```
 agent-bus whoami                                # the address this process speaks as
-agent-bus send --to claude@my-repo --status REQUEST --verb review --thread expander "..."
+agent-bus send --to claude@my-repo --status REQUEST --verb review --thread expander "..."   # --thread is required
 agent-bus inbox                                 # unread for whoami; add --ack to mark read
 agent-bus ack 12 13
 agent-bus who                                   # instances active recently
