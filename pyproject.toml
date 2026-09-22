@@ -1,0 +1,19 @@
+[project]
+name = "agent-bus"
+version = "0.1.0"
+description = "Message bus for coding agents: MCP over HTTP, a SQLite store, and a CLI for hooks and humans"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = [
+    "mcp>=2.2,<3",
+    "uvicorn>=0.30",
+]
+
+[project.scripts]
+agent-bus = "agent_bus.cli:main"
+agent-bus-daemon = "agent_bus.daemon:main"
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
