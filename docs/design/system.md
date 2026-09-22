@@ -436,23 +436,30 @@ and `CHANGELOG.md`.
 
 ## Operations
 
-Host install, from a clone, needs root once for the uid boundary: install
-the daemon under `/opt/agent-bus` with `uv tool install`, enable
-`systemd/agent-bus.service`, copy `PROTOCOL.md` into the state directory,
-copy the admin token out to `$AGENTS/admin.token`. Then `agent-bus enroll`
-each harness, set `AGENT_BUS_TOKEN_CLAUDE` in the shell that starts Claude,
-and install the plugin in each harness. The README has the exact commands.
+Host install needs root once for the uid boundary: `scripts/deploy-host.sh`
+copies the package under `/opt/agent-bus` (its Python and uv's cache too,
+since the dynamic uid cannot read into anyone's home), then the system unit
+is enabled. Each release is the same script again; it restarts the unit.
+Enrolling is `sudo /opt/agent-bus/bin/agent-bus enroll <harness>` on the
+host with the printed token placed by the owner; `AGENT_BUS_TOKEN_CLAUDE`
+goes in the shell that starts Claude; each harness installs the plugin. The
+README has the commands.
 
-Cutting over from 0.3 on a live host is a coordinated step, because the
-shared token stops working the moment the new daemon starts: notify every
-harness on the old bus first, restart, enroll, then each harness reinstalls
-its plugin (to pick up the new CLI) and re-keys its MCP config.
+Moving a live development daemon to the system unit is
+`docs/ops/cutover.md`: deploy, mask the user unit, start the system unit
+once so it mints its own admin token, checkpoint the write-ahead log and
+copy the store, ledger, and projections in, start, verify, then clean the
+owner's home of everything but the participant tokens, then every client
+updates its plugin. Rollback is re-enabling the user unit, until the
+cleanup.
 
 Tests: `uv run --group dev pytest`. `tests/test_hook.py` brackets the hook
-against a stub; `tests/test_daemon.py` runs the real daemon on an ephemeral
-port and covers identity derivation, the harness check on `me`, receipt
-scope, thread membership, the ledger's chain and admin-only door, file
-modes, the MCP path carrying the caller, and the 0.3 migration.
+against a stub, including an unreadable token file; `tests/test_daemon.py`
+runs the real daemon on an ephemeral port and covers identity derivation,
+the harness check on `me`, receipt scope, thread membership, the ledger's
+chain and admin-only door, file modes, the MCP path carrying the caller,
+per-machine enrollment, the CLI's admin path needing no participant token,
+enroll printing for another machine, and the 0.3 and 0.4 migrations.
 
 ## Deliberately not built
 

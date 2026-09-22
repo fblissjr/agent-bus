@@ -10,12 +10,14 @@ Where they differ, both positions are stated and marked **differs**, and the
 owner rules.
 
 Settled decisions live in `PROTOCOL.md`; how the system works lives in
-`docs/design/system.md`. When a decision here is made, move its outcome into
-one of those and delete it from this file.
+`docs/design/system.md`. A decided item keeps a one-line status here, with
+the release that implemented it, so the reasoning stays findable.
 
 Ordered by how much the answer changes what gets built next.
 
 ## 1. Which boundaries are real on a single-uid host
+
+**Status: decided (a); the admin-token half shipped in 0.5.0.**
 
 **Context.** Everything on the host runs as the owner's uid: every Claude
 session, every Antigravity session, Codex when it arrives, and the owner's
@@ -60,6 +62,8 @@ leave the daemon's state directory. See decision 3.
 
 ## 2. When to install the uid boundary, and how
 
+**Status: decided (a), now, copied install; code and runbook shipped in 0.5.0, the host step is the owner's (`docs/ops/cutover.md`).**
+
 **Context.** The system unit (`systemd/agent-bus.service`) runs under
 `DynamicUser`, which gives the service a throwaway uid and read-only access
 to the rest of the system. Two things follow. First, the owner's home is not
@@ -89,6 +93,8 @@ daemon is a snapshot the owner chose, not whatever the clone contains.
 
 ## 3. Where the admin token lives, and the audit path
 
+**Status: decided (a); shipped in 0.5.0.**
+
 **Context.** Follows from decision 1. The README currently says to copy the
 admin token to `$AGENTS/admin.token`, and `enroll`, `ledger`, and
 `show --audit` read it from there.
@@ -114,6 +120,8 @@ times a month, never on anything an agent runs. Change: README, and
 
 ## 4. Enrolling a second machine
 
+**Status: decided (a); `enroll --machine` shipped in 0.5.0, the Mac is 0.6.0 in `roadmap.md`.**
+
 **Context.** The Mac will join over Tailscale. Enrollment needs the admin
 token.
 
@@ -136,6 +144,8 @@ row.
 **Antigravity agrees with Claude on (a).** Mint participant tokens on the host (`sudo agent-bus enroll <harness>`) and copy only the participant token to the Mac. The admin token must never cross the network.
 
 ## 5. Ledger schema: the enrolled name, and how to change the schema at all
+
+**Status: decided (a); ledger version 2 shipped in 0.5.0.**
 
 **Context.** An `enroll` row records who enrolled (the admin identity) but
 carries the enrolled participant's name only as a body hash. The row hash
@@ -160,6 +170,8 @@ must never be. (c) is fine for a month and wrong for a year.
 
 ## 6. Receipt scope: harness-and-repo, or per instance
 
+**Status: decided, keep.**
+
 **Context.** Chosen during 0.4 without a round trip: acks are recorded for
 `harness@repo`, so the first Claude in a repo to ack a broadcast settles it
 for every Claude there, and a new session inherits no backlog. Mail
@@ -172,6 +184,8 @@ inboxes for broadcasts. The ledger records which instance acked, so nothing
 is lost either way. Antigravity accepted this in review.
 
 ## 7. Explicit thread membership
+
+**Status: decided (a); designed, not scheduled.**
 
 **Context.** Threads are groups whose membership is derived: you can read a
 thread if you sent in it or were addressed in it. That cannot express "add
@@ -205,6 +219,8 @@ considered.
 
 ## 9. Codex
 
+**Status: decided; when first used, per `roadmap.md`.**
+
 **Context.** Codex reads `.codex-plugin/plugin.json` and a plugin-root
 `.mcp.json`, has hooks with a trust model, and takes a bearer token from a
 named environment variable. Its session id variable and hook stdin shape are
@@ -220,6 +236,8 @@ release.** Differs on priority, not on approach.
 
 ## 10. Releases and who pushes
 
+**Status: decided.**
+
 **Context.** The owner does not want the Claude side to push; Gemini has
 been pushing. Versions cascade through `pyproject.toml`, both plugin
 manifests, `marketplace.json`, and `CHANGELOG.md`, and installed plugins
@@ -233,6 +251,8 @@ range; that review discipline caught two bugs on the first day.
 
 ## 11. Per-session handles
 
+**Status: decided, not now.**
+
 **Context.** Within a harness, session ids are self-reported.
 
 **Recommendation: not now.** The observed failure was confusion, and
@@ -241,6 +261,8 @@ daemon can mint a handle on first sight of a new session id and require it
 thereafter, with no human involved; the protocol already says so.
 
 ## 12. Retention
+
+**Status: decided, none.**
 
 **Context.** The store, the ledger, and the projections grow without bound.
 They are text.
@@ -251,6 +273,8 @@ the owner notices.
 
 ## 13. Projections
 
+**Status: decided, keep.**
+
 **Context.** With projections owner-only on disk and readable only through
 `sudo`, they no longer serve agents at all.
 
@@ -258,6 +282,8 @@ the owner notices.
 morning when the daemon is down, and that case has not gone away.
 
 ## 14. The two Claude Code harness reports
+
+**Status: recommended; sending them is the owner's action.**
 
 **Context.** Two harness behaviors were worked around during the build:
 hook output dropped for prompts queued mid-turn, and a run of turns

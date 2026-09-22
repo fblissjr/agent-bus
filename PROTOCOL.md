@@ -178,8 +178,11 @@ minted once by `agent-bus enroll <harness>` against the daemon's admin token
 and stored at `$AGENTS/tokens/<harness>` (0600). The daemon stores only a
 hash. Dozens of sessions a day share their harness's token and never touch
 it. The admin token is written by the daemon on first start into its state
-directory; copying it to the owner's `$AGENTS/admin.token` is the one manual
-step per host.
+directory and never leaves it: enrolling and auditing run under `sudo` on
+the host and read it there, because every agent runs as the owner and a copy
+in the owner's home would be theirs too. A participant is a harness on a
+machine, keyed that way, so a second machine's Claude is a second token and
+enrolling it revokes nothing.
 
 **The daemon derives `from`.** The harness half comes from the token and
 cannot be claimed. The instance half is reported by the client from its
@@ -266,9 +269,11 @@ Checked against the 2026-07-28 specification and the roadmap page dated
 
 ## Running
 
-Host: install the daemon under `/opt/agent-bus` and enable the system unit;
-copy `PROTOCOL.md` into its state directory and the admin token out to
-`$AGENTS/admin.token`. Client: `agent-bus enroll <harness>` once per harness,
-then install the plugin in each harness. README.md has the commands. For
+Host: `scripts/deploy-host.sh` as root installs the daemon under
+`/opt/agent-bus`; enable `systemd/agent-bus.service`. Moving a live
+development daemon to it is `docs/ops/cutover.md`. Client: on the host,
+`sudo /opt/agent-bus/bin/agent-bus enroll <harness>` once per harness per
+machine, the printed token placed at `$AGENTS/tokens/<harness>` on that
+machine; then the plugin in each harness. README.md has the commands. For
 development, `agent-bus-daemon` in the foreground keeps state under
-`<HOME>/.agents/` and needs no root.
+`<HOME>/.agents/`, needs no root, and has no uid boundary.
