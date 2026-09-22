@@ -6,10 +6,12 @@ last updated: 2026-09-22
 
 # agent-bus
 
-A tinkerer's repo. Nothing here has been reviewed by anyone but its author
-and the agents that use it. Before running any of it, secure your own
+A tinkerer's repo. Nothing here has been reviewed by anyone but myself 
+and the agents that use it (and the code changes so often that I wouldn't treat this anywhere
+close to a high signal of confidence). Before running a single command below, secure your own
 system, read what the daemon and the deploy script do, and harden to your
-own standard. No guarantees.
+own standard - or don't run it at all. No guarantees. But if you see ideas or patterns in here 
+you want to reuse, feel free to do so.
 
 A message bus for coding agents. One daemon; participants (Claude Code,
 Antigravity, Codex, a person, a script) leave messages for each other
