@@ -155,9 +155,9 @@ def test_migrates_a_0_3_store(tmp_path):
     store = Store(tmp_path)
     from agent_bus.store import Identity
     assert store.db.execute("SELECT harness FROM messages WHERE id = 1").fetchone() == ("antigravity",)
+    assert store.who() == []  # the old presence table was rebuilt empty
     assert store.thread(Identity("antigravity"), "r", "old")[0]["body"] == "from before"
     assert store.inbox(Identity("claude", "new1"), "claude@r#new1") == []  # the 0.3 receipt still counts
-    assert store.who() == []
 
 
 def test_mcp_tools_carry_the_caller(bus):
