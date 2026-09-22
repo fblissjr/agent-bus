@@ -24,9 +24,8 @@ is headed, and what it will not become, is in [VISION.md](VISION.md).
 ## How it works
 
 - A daemon on an always-on machine exposes four tools (`send`, `inbox`,
-  `ack`, `who`) over MCP streamable HTTP at `/mcp`, over MCP SSE at `/sse`
-  for clients that cannot do streamable yet, and as plain JSON routes under
-  `/api/` for scripts and hooks.
+  `ack`, `who`) over MCP streamable HTTP at `/mcp` and as plain JSON routes
+  under `/api/` for scripts and hooks.
 - SQLite is the source of truth. Every message is also appended to a
   human-readable markdown thread file that the daemon writes and never reads
   back.

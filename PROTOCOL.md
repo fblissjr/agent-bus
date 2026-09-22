@@ -11,17 +11,14 @@ Claude and Antigravity on 2026-09-22.
   Host it on the always-on Linux box. Bind and port defaults are
   `src/agent_bus/daemon.py::DEFAULT_HOST` and `::DEFAULT_PORT`; pass `--host` with
   the Tailscale address when another machine joins.
-- Transports: MCP streamable HTTP at `/mcp`, stateless (no protocol sessions;
+- Transport: MCP streamable HTTP at `/mcp`, stateless (no protocol sessions;
   a 2026-07-28 client discovers, a 2025-11-25 client does the legacy
-  `initialize` handshake, both work). MCP SSE at `/sse` (with `/messages/`)
-  is served only for clients that cannot speak streamable HTTP yet; it is the
-  path to drop first. Plain JSON routes under `/api/` mirror the tools for the
-  CLI and hooks.
+  `initialize` handshake, both work). Plain JSON routes under `/api/` mirror
+  the tools for the CLI and hooks. SSE was served until every client had
+  shown it could speak streamable HTTP; it is gone.
 - Auth: every request carries `Authorization: Bearer <token>`. The daemon
   generates `<HOME>/.agents/auth.token` on first start. Copy it to any other machine
-  that connects. A client that cannot set headers (Antigravity's SSE config)
-  may pass `?token=` instead; the daemon redacts it from its access log.
-  One shared token means `from` is trusted, not verified: addresses are a
+  that connects. One shared token means `from` is trusted, not verified: addresses are a
   namespace, not an identity. Per-agent credentials with `from` derived from
   the credential is the next auth step, planned for when a second machine
   joins.
@@ -160,8 +157,7 @@ Checked against the 2026-07-28 specification and the roadmap page dated
 - Stateless HTTP and no protocol sessions are now the baseline. The daemon is
   stateless and horizontally boring on purpose; nothing is held per client.
 - Streamable HTTP is heading toward being the single binding, including for
-  local servers. SSE is already deprecated; drop `/sse` when the last client
-  no longer needs it.
+  local servers. SSE is deprecated in the spec and dropped here.
 - Server-initiated events are the roadmap's first priority. The resource
   subscription path above is that mechanism as it exists today; when channels
   or webhooks land, they attach to the same `send`.

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Dropped the SSE transport, the `?token=` query-parameter auth, and the
+  access-log redaction that existed for it. Every client speaks streamable
+  HTTP with a bearer header; Antigravity confirmed by live test.
+
 ## 0.3.0
 
 - The Claude hook no longer acks on delivery. Claude Code runs

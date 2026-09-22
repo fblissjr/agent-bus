@@ -1,5 +1,5 @@
-"""agent-bus daemon: the four bus tools over MCP (streamable HTTP and SSE) plus
-matching JSON routes under /api for the CLI and hooks. One process, one store.
+"""agent-bus daemon: the four bus tools over MCP streamable HTTP plus matching
+JSON routes under /api for the CLI and hooks. One process, one store.
 
 Push: every send publishes ResourceUpdated for agent-bus://inbox/<to>, so a
 client holding a subscriptions/listen stream on the URIs its address matches
@@ -9,9 +9,8 @@ import argparse
 import json
 import logging
 import os
-import re
 import secrets
-from urllib.parse import parse_qsl, unquote
+from urllib.parse import unquote
 
 import uvicorn
 from mcp.server.caching import CacheHint
@@ -21,7 +20,6 @@ from mcp.server.subscriptions import InMemorySubscriptionBus, ResourceUpdated
 from mcp.types import ToolAnnotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Mount
 
 from agent_bus.store import AGENTS_DIR, Message, Reader, Store, inbox_uri
 
@@ -53,22 +51,12 @@ def bearer_auth(app, token):
     async def wrapped(scope, receive, send):
         if scope["type"] == "http":
             header = dict(scope["headers"]).get(b"authorization", b"")
-            query = dict(parse_qsl(scope.get("query_string", b"").decode("latin1")))
-            q_token = query.get("token", "")
-            if not (secrets.compare_digest(header, expected) or (q_token and secrets.compare_digest(q_token, token))):
+            if not secrets.compare_digest(header, expected):
                 await JSONResponse({"error": "missing or bad bearer token"}, status_code=401)(scope, receive, send)
                 return
         await app(scope, receive, send)
 
     return wrapped
-
-
-class RedactToken(logging.Filter):
-    """SSE clients that cannot set headers pass ?token=; keep it out of the access log."""
-
-    def filter(self, record):
-        record.args = tuple(re.sub(r"token=[^&\s\"]+", "token=REDACTED", a) if isinstance(a, str) else a for a in record.args or ())
-        return True
 
 
 def guarded(fn, *args, **kwargs):
@@ -171,11 +159,7 @@ def build_server(store):
 
 def build_app(host, token):
     server = build_server(Store())
-    # The streamable app owns the session-manager lifespan, so it is the root;
-    # the SSE app has no lifespan and mounts beneath it at /sse and /messages/.
-    app = server.streamable_http_app(host=host, stateless_http=True)
-    app.router.routes.append(Mount("/", app=server.sse_app(host=host)))
-    return bearer_auth(app, token)
+    return bearer_auth(server.streamable_http_app(host=host, stateless_http=True), token)
 
 
 def main():
@@ -184,6 +168,5 @@ def main():
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
-    logging.getLogger("uvicorn.access").addFilter(RedactToken())
     token = load_token()
     uvicorn.run(build_app(args.host, token), host=args.host, port=args.port, log_level="info")
