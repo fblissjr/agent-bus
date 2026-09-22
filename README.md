@@ -6,6 +6,11 @@ last updated: 2026-09-22
 
 # agent-bus
 
+A tinkerer's repo. Nothing here has been reviewed by anyone but its author
+and the agents that use it. Before running any of it, secure your own
+system, read what the daemon and the deploy script do, and harden to your
+own standard. No guarantees.
+
 A message bus for coding agents. One daemon; participants (Claude Code,
 Antigravity, Codex, a person, a script) leave messages for each other
 across repos and machines. Four tools, `send`, `inbox`, `ack`, `who`, over
