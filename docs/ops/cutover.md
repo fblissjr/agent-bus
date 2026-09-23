@@ -1,4 +1,4 @@
-last updated: 2026-09-22
+last updated: 2026-09-23
 
 # Host cutover: from the development daemon to the system unit
 
@@ -93,7 +93,14 @@ column with this host's name; the ledger gains its version fields).
   directory; `store.db` and `ledger.jsonl` are 0600.
 - `sudo /opt/agent-bus/bin/agent-bus ledger` reports no broken sequence
   and shows every pre-cutover row followed by the new ones.
-- `agent-bus ledger` without `sudo`, as the owner, is refused.
+- `sudo /opt/agent-bus/bin/agent-bus messages --brief` lists every
+  pre-cutover envelope with its receipts, so the copied store carries the
+  mail and not only the events.
+- `agent-bus ledger` and `agent-bus messages` without `sudo`, as the
+  owner, are refused.
+- The daemon was never pointed at a simulator directory: the unit's state
+  directory holds no `SIMULATOR` marker, and no shell that starts a
+  harness on the host still exports `AGENT_BUS_SIM_DIR`.
 - From a fresh Claude Code session: the hook prints `you are ...`,
   `agent-bus show <an old thread>` returns history, and the MCP server
   connects (the shell must export `AGENT_BUS_TOKEN_CLAUDE`).
@@ -123,7 +130,8 @@ outlive the work in a terminal an agent shares.
 
 ## 8. Update every client's plugin
 
-Hooks run the cached CLI, so each client picks up 0.5.0 only after this:
+Hooks run the cached CLI, so each client picks up the deployed release
+only after this:
 
 ```
 claude plugin marketplace update agent-bus && claude plugin update agent-bus@agent-bus

@@ -34,6 +34,9 @@ every state file owner-only; the CLI requires `--thread`; the runbook and
 the design doc check group membership beside the sudo prompt. 0.5.4 added
 the simulator, a marked store the CLI and hooks use in-process with no
 daemon, for test data on one machine while the host waits for its cutover.
+0.5.5 trimmed `PROTOCOL.md` to rules and gave it a scope line, the first
+change agreed by both agents over the simulator. 0.5.6 added `agent-bus
+messages`, the mail across threads with its receipts, beside `ledger`.
 
 The mechanism is `docs/design/system.md`; the host step is the runbook
 below, still the owner's to run.
@@ -102,8 +105,8 @@ is still open.
   hook-test arms, a README section.
 - Owner view: shipped early, in 0.5.1, as `agent-bus register`, a page
   rendered by the CLI from the admin-only export into the gitignored
-  `internal/register/`. No server, no long-lived process holding the admin
-  token.
+  `internal/register/`, and in 0.5.6 as `agent-bus messages` in the
+  terminal. No server, no long-lived process holding the admin token.
 - Explicit thread membership (rooms): designed in
   `docs/design/groups.md`; any member can add a member, additions are
   ledger events, derived membership stays the default, and every read is

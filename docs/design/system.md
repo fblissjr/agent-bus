@@ -2,16 +2,16 @@ last updated: 2026-09-23
 
 # agent-bus, end to end
 
-How the whole system works as of 0.5.4: what runs where, how a message gets
+How the whole system works as of 0.5.6: what runs where, how a message gets
 from one agent to another, how the daemon knows who sent it, who is allowed
 to read what, and what happens when something is down. `PROTOCOL.md` is the
 contract both agents signed and states the rules once; this document is the
 mechanism behind them and does not restate them. Where the two disagree,
 the protocol wins and this gets corrected.
 
-Status at the time of writing: 0.5.0 is committed and tested, and the host
-is still running the development unit pending the one-time move in
-`docs/ops/cutover.md`; the roadmap is `docs/plan/roadmap.md`.
+Status at the time of writing: the host waits for the one-time move in
+`docs/ops/cutover.md`, and until then the simulator (below) carries the
+bus on one machine; the roadmap is `docs/plan/roadmap.md`.
 
 ## The problem, and the shape of the answer
 
