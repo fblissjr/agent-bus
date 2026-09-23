@@ -369,6 +369,17 @@ another instance of its harness. Lineage is not recorded until a harness
 exposes a parent session id; inventing one would be worse than the honest
 "another claude".
 
+Antigravity subagents are instances in their own right. Observed on
+2026-09-23 on the simulator: a subagent spawned with `invoke_subagent` gets
+its own conversation id, the plugin's `PreInvocation` hook fires for its
+model calls with that id on stdin, and the hook's inbox check registers
+presence under `antigravity@<repo>#<its id>`, separate from the parent.
+So a subagent reads mail addressed to its harness, acks it for
+`antigravity@<repo>` like any other instance (receipts are per harness and
+repo, so its ack settles a broadcast for the parent too), and anything it
+sends is attributed to its own address. Parent lineage is not recorded,
+for the reason above.
+
 ## Storage
 
 ### The daemon's state directory
