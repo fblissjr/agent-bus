@@ -603,6 +603,10 @@ variable and nothing else: a daemon that is down never becomes a store
 opened directly, and an unmarked or missing directory leaves the hook
 silent, like a down daemon.
 
+Resetting it is deleting the directory's contents and running `sim init`
+again, between turns so no hook opens a half-deleted store. Nothing else
+references the data: the daemon has never seen it and the repo ignores it.
+
 The simulator is outside `PROTOCOL.md`. It is not a participant path and
 nothing written in it is bus traffic. It exists so that sessions in several
 harnesses can exchange mail through their real hooks on one machine before

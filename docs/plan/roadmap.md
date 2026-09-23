@@ -37,6 +37,12 @@ daemon, for test data on one machine while the host waits for its cutover.
 0.5.5 trimmed `PROTOCOL.md` to rules and gave it a scope line, the first
 change agreed by both agents over the simulator. 0.5.6 added `agent-bus
 messages`, the mail across threads with its receipts, beside `ledger`.
+0.5.7 added the release runbook, the tag-on-push workflow, and the
+per-ask rule in the skill; 0.5.8 the Antigravity hook trailer; 0.5.9 the
+observe-first rule, the ceiling on answers, the CLI block in the skill,
+and `rules/AGENTS.md` as an always-on Antigravity rule. Each of the last
+three came from a behaviour seen in a live trace on the simulator the
+same day.
 
 The mechanism is `docs/design/system.md`; the host step is the runbook
 below, still the owner's to run.

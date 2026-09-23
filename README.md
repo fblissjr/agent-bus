@@ -105,7 +105,13 @@ export AGENT_BUS_SIM_DIR=...  # in the shell that starts each harness; the hooks
 ```
 
 Every command below then works without a daemon, `enroll` aside. The
-daemon refuses to serve a marked directory.
+daemon refuses to serve a marked directory. To start over, delete the
+store and re-mark, between turns; it is test data, and this is the one
+ledger that is yours to discard:
+
+```
+rm -rf data/* && uv run agent-bus sim init
+```
 
 ## CLI
 
@@ -142,6 +148,7 @@ docs/ops/cutover.md            moving a live host to the system unit
 docs/ops/release.md            the per-release steps, from bump to client update
 .claude-plugin/                Claude Code plugin manifest and marketplace
 plugin.json, hooks.json        Antigravity plugin manifest and hook
+rules/AGENTS.md                the bus constraints as an always-on Antigravity rule
 .mcp.json, hooks/, skills/     Claude plugin content
 tests/                         hook against a stub server; daemon on a real socket; the simulator with no daemon
 docs/design/                   system.md, identity-hardening.md, groups.md

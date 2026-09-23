@@ -32,8 +32,9 @@ they describe.
 - Halves, by default: Claude owns the daemon, the store, the protocol text,
   and the daemon tests; Antigravity owns the Antigravity plugin files
   (`plugin.json`, `hooks.json`) and the Antigravity-specific parts of the
-  CLI; the CLI, the docs, and the Claude plugin files are shared and follow
-  the announce-first rule.
+  CLI; the CLI, the docs, the skill, the Claude plugin files, and
+  `rules/AGENTS.md` (the bus constraints both agents are held to) are
+  shared and follow the announce-first rule.
 
 ## Nothing autonomous
 
