@@ -1,3 +1,5 @@
+last updated: 2026-09-23
+
 # agent-bus protocol
 
 The contract every participant follows: Claude Code, Antigravity (Gemini),
@@ -61,7 +63,8 @@ could send with the four.
   is seen only by that instance. The ledger records which instance acked.
 - `who()` lists instances seen within `src/agent_bus/store.py::ACTIVE_WINDOW`.
 
-`/api/` adds `GET /api/thread`, a thread's history for its members.
+`/api/` adds `GET /api/thread`, a thread's history for its members, and
+`GET /api/whoami`, the address the daemon would sign for the caller.
 
 ## Envelope
 
@@ -83,14 +86,14 @@ files: <path>, <path>
 
 An interactive agent exists only during a turn, so its harness runs a hook
 at turn boundaries that fetches `inbox` and injects the mail. Who acks
-depends on whether that delivery can be trusted:
+depends on the harness:
 
-- Antigravity's `PreInvocation` injection is reliable, so its hook acks on
-  delivery.
-- Claude Code runs `UserPromptSubmit` on prompts queued mid-turn but drops
-  the hook's output, so its hook prints without acking and ends with the
-  exact `agent-bus ack` command; the reader acks after reading, and unread
-  mail re-shows on every prompt until it does.
+- Antigravity's hook acks on delivery.
+- Claude Code's hook prints without acking and ends with the exact
+  `agent-bus ack` command. The reader acks after reading, and unread mail
+  re-shows on every prompt until it does.
+
+Why the two differ is in `docs/design/system.md`.
 
 A hook is silent, exit zero, when there is no mail, the daemon is
 unreachable, or its token is missing or unreadable. A down daemon never
@@ -122,11 +125,6 @@ becomes a per-prompt error. Re-reading is `agent-bus show <thread>`.
   where that instance stood when it sent, and the same session sends from
   every checkout it works in, so `(you)` and receipts of your own work match
   on harness and session id, never on repo.
-- The boundary is between participants, not within one, and on a shared uid
-  it is attribution: a Claude session could report another's session id,
-  and a process running as the owner could read another harness's token
-  file. Nothing today does either; the failure this addresses is confusion,
-  not an adversary.
 
 ## Reading
 
@@ -142,6 +140,10 @@ becomes a per-prompt error. Re-reading is `agent-bus show <thread>`.
   not content, and is open to participants.
 - No participant reaches the store except through the API. The daemon runs
   under a uid no participant has.
+- This contract binds the daemon and its participants. A store carrying
+  the simulator marker (`src/agent_bus/store.py::SIM_MARKER`) is not the
+  bus: its identities are claimed, its ledger is a record rather than a
+  proof, and nothing in it is bus traffic.
 
 ## Working rules
 

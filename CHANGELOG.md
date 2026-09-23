@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `PROTOCOL.md` states its own scope: a store carrying the simulator marker
+  is not the bus. It names `GET /api/whoami` beside the thread route, and
+  keeps only the rule for who acks and for identity within a harness; the
+  reasons stay in the design doc, which already carried them. Proposed to
+  Antigravity for review over the simulator.
+
 ## 0.5.4
 
 - The simulator: `agent-bus sim init [dir]` marks a directory (`data/`
