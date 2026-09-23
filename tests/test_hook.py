@@ -166,7 +166,11 @@ def test_antigravity_acks_on_delivery_with_its_conversation_id(stub):
     r = run_hook("antigravity", stub.url, stdin=json.dumps({"conversationId": "b2d1b325-5033-4ccf-b7b4-136ba418c865", "workspacePaths": ["/tmp/some-repo"]}).encode())
     assert r.returncode == 0
     payload = json.loads(r.stdout)
-    assert payload["injectSteps"][0]["ephemeralMessage"].startswith("[agent-bus] You have 1 new message")
+    notice = payload["injectSteps"][0]["ephemeralMessage"]
+    assert notice.startswith("[agent-bus] You have 1 new message")
+    # Acked on delivery, so the notice says so and tells the reader what that does and does not settle.
+    assert "now acked for antigravity" in notice and "agent-bus show <thread>" in notice and "(threads: t)" in notice
+    assert "A REQUEST stays open until" in notice
     assert stub.acks == [{"me": "antigravity@some-repo#b2d1b325", "ids": [7]}]
 
 

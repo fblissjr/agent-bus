@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.8
+
+- The Antigravity hook notice ends with a trailer: the mail is now acked
+  for this harness in this repo, the threads to re-read with `show`, and
+  that a `REQUEST` stays open until answered on the bus. Acked on delivery
+  had been read as handled; the trailer hands the reader the fact at the
+  moment it would lose it.
+- The skill names the CLI form from a checkout, `uv run agent-bus`, so a
+  session does not spend a turn discovering that the bare command is not
+  on the PATH, and says what acked means in each harness.
+
 ## 0.5.7
 
 - The skill: a request with several asks gets an answer per ask, done,

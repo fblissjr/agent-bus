@@ -331,6 +331,15 @@ Claude hook prints and does not ack; the notice ends with the exact
 re-shows on every prompt until it does. A duplicate is recoverable; a loss
 is not. `PROTOCOL.md` records the rule per harness.
 
+Acking on delivery has a cost the simulator made visible: a request that
+arrives during an unrelated Antigravity turn drops out of its inbox after
+one showing, and the model treated acked as handled three times in one
+day. So the Antigravity notice ends with a trailer
+(`cli.py::acked_trailer`) saying the mail is now acked, naming the threads
+to re-read with `show`, and stating that a `REQUEST` stays open until
+answered on the bus. The fact the model kept losing is now handed to it at
+the moment it would lose it.
+
 ### Silence is the failure mode, by design
 
 The hook runs on every prompt in every session. It prints nothing and exits

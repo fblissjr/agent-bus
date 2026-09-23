@@ -152,6 +152,7 @@ def test_antigravity_hook_acks_on_delivery(sim):
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
     assert "for gemini" in out["injectSteps"][0]["ephemeralMessage"]
+    assert "now acked for antigravity" in out["injectSteps"][0]["ephemeralMessage"] and "(threads: t)" in out["injectSteps"][0]["ephemeralMessage"]
     assert json.loads(run(["hook", "--agent", "antigravity"], data, repo, stdin=stdin).stdout) == {}
     assert json.loads(run(["ledger", "--json"], data, repo).stdout)["rows"][-1]["subject"] == "antigravity@repo"
 

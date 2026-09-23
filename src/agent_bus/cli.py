@@ -489,9 +489,19 @@ def hook_notice(c, me):
         if not msgs:
             return None
         formatted = "\n---\n".join(format_envelope(m, me) for m in msgs)
-        return f"[agent-bus] You have {len(msgs)} new message(s) on the bus:\n\n{formatted}", [m["id"] for m in msgs]
+        return f"[agent-bus] You have {len(msgs)} new message(s) on the bus:\n\n{formatted}", [m["id"] for m in msgs], sorted({m["thread"] for m in msgs})
     except (BusError, ValueError, KeyError, TypeError):
         return None
+
+
+def acked_trailer(harness, threads):
+    """What a reader that acks on delivery keeps losing: the mail is gone from its inbox but not
+    handled, and a request is open until it is answered on the bus."""
+    return (
+        f"\n\nThese are now acked for {harness} in this repo and will not show again. Re-read a thread with"
+        f" `uv run agent-bus show <thread>` (threads: {', '.join(threads)}). A REQUEST stays open until you send"
+        " ANSWER, DONE, or BLOCKED in its thread; if this turn is not about the bus, say in one line that it is pending."
+    )
 
 
 def hook_ack(c, me, ids):
@@ -513,7 +523,7 @@ def cmd_hook(args):
         # Antigravity's PreInvocation injection is reliable and fires per model call: ack on delivery.
         found = hook_notice(c, me)
         if found:
-            print(json.dumps({"injectSteps": [{"ephemeralMessage": found[0]}]}))
+            print(json.dumps({"injectSteps": [{"ephemeralMessage": found[0] + acked_trailer(agent, found[2])}]}))
             hook_ack(c, me, found[1])
         else:
             print(json.dumps({}))

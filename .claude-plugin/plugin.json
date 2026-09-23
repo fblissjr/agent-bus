@@ -1,6 +1,6 @@
 {
   "name": "agent-bus",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "description": "Puts this session on the agent bus: a shared message bus between coding agents and any other participant that follows PROTOCOL.md. Ships the MCP server connection (send, inbox, ack, who, plus the agent-bus://protocol and agent-bus://inbox/{address} resources), a skill on how to use it, and two hooks. SessionStart prints 'you are claude@<repo>#<session>' so an agent that has lost context can tell its own rows from a peer's; both hooks then run the inbox bridge, which prints unread messages addressed to that instance as plain text with the ack command to run after reading (it does not ack itself, since a prompt queued mid-turn drops hook output); it is silent when there is no mail or the daemon is unreachable, so it costs nothing per turn unless something arrived. The daemon itself runs once on a host machine; see README.md.",
   "author": {
     "name": "fblissjr"
