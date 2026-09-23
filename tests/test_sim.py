@@ -188,3 +188,18 @@ def test_no_fallback_when_the_daemon_is_down(sim):
     r = run(["send", "--to", "all", "--status", "FYI", "--thread", "t", "hello"], None, repo, "claude", "a1", env_extra={"AGENT_BUS_TOKEN_CLAUDE": "t"})
     assert r.returncode != 0 and "cannot reach" in r.stderr.decode()
     assert Store(data, sim=True).db.execute("SELECT count(*) FROM messages").fetchone()[0] == 0
+
+
+def test_messages_across_threads_need_no_token(sim):
+    data, repo = sim
+    send(sim, "claude", "a1", "antigravity@repo", "one", thread="x")
+    send(sim, "antigravity", "b2", "claude@repo", "two", thread="y")
+    assert run(["ack", "1"], data, repo, "antigravity", "b2").returncode == 0
+    r = run(["messages", "--brief"], data, repo)
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.decode().splitlines()
+    assert len(lines) == 2 and lines[0].endswith("acked: antigravity@repo") and lines[1].endswith("acked: -")
+    out = json.loads(run(["messages", "--thread", "y", "--json"], data, repo).stdout)
+    assert [m["body"] for m in out] == ["two"] and out[0]["acked"] == []
+    r = run(["messages", "--status", "NOPE"], data, repo)
+    assert r.returncode != 0 and "invalid choice" in r.stderr.decode()

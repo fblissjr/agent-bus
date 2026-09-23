@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.6
+
+- `agent-bus messages`, the sibling of `ledger`: every message across
+  threads with the receipts that acked it, oldest first, as envelopes,
+  one line each (`--brief`), or JSON. Structured filters (`--repo`,
+  `--thread`, `--from`, `--to`, `--status`, `--since`, `--until`,
+  `--limit`); sender and recipient match by prefix. Admin token on the
+  host, no token on the simulator, refused to participants, who read a
+  thread they belong to with `show`. Backed by a new admin-only
+  `GET /api/messages`.
+
 ## 0.5.5
 
 - `PROTOCOL.md` states its own scope: a store carrying the simulator marker

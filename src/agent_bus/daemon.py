@@ -227,6 +227,14 @@ def build_server(store):
         identity = caller.get()
         return store.thread(identity, q["repo"], q["thread"], audit=identity.harness == ADMIN)
 
+    @server.custom_route("/api/messages", methods=["GET"])
+    @api
+    async def api_messages(request):
+        if caller.get().harness != ADMIN:
+            raise ValueError("messages across threads are read with the admin token only; members read a thread with /api/thread")
+        q = request.query_params
+        return store.messages(repo=q.get("repo"), thread=q.get("thread"), sender=q.get("from"), to=q.get("to"), status=q.get("status"), since=q.get("since"), until=q.get("until"), limit=q.get("limit", 200))
+
     @server.custom_route("/api/ledger", methods=["GET"])
     @api
     async def api_ledger(request):

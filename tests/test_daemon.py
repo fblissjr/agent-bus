@@ -369,3 +369,30 @@ def test_cli_send_needs_a_thread_when_not_interactive(bus, tmp_path):
     assert bus.call("GET", "/api/ledger", ADMIN)[1]["rows"][-1]["event"] == "enroll"
     r = cli(bus, ["send", "--to", "all", "--status", "FYI", "--thread", "t", "hello"], tmp_path, token_env={"AGENT_BUS_HARNESS": "claude", "AGENT_BUS_TOKEN_CLAUDE": claude})
     assert r.returncode == 0, r.stderr
+
+
+def test_messages_is_admin_only_filtered_and_carries_receipts(bus, tmp_path):
+    claude, antigravity = bus.enroll("claude"), bus.enroll("antigravity")
+    bus.call("POST", "/api/send", claude, {"to": "antigravity@r", "repo": "r", "status": "REQUEST", "verb": "review", "body": "first", "thread": "a"}, instance="s1")
+    bus.call("POST", "/api/send", antigravity, {"to": "claude@r", "repo": "r", "status": "ANSWER", "body": "second", "thread": "a"}, instance="s2")
+    bus.call("POST", "/api/send", claude, {"to": "all", "repo": "r", "status": "FYI", "body": "third", "thread": "b"}, instance="s1")
+    bus.call("POST", "/api/ack", antigravity, {"me": "antigravity@r#s2", "ids": [1]}, instance="s2")
+    assert bus.call("GET", "/api/messages", claude)[0] == 400  # a participant reads a thread it belongs to, never the lot
+    code, out = bus.call("GET", "/api/messages", ADMIN)
+    assert code == 200 and [m["body"] for m in out] == ["first", "second", "third"]
+    assert [a["reader"] for a in out[0]["acked"]] == ["antigravity@r"] and out[0]["acked"][0]["ts"] and out[1]["acked"] == []
+    ids = lambda query: [m["id"] for m in bus.call("GET", f"/api/messages?{query}", ADMIN)[1]]
+    assert ids("thread=b") == [3]
+    assert ids("from=antigravity") == [2] and ids("from=claude@r%23s1") == [1, 3]
+    assert ids("to=claude@r") == [2] and ids("to=all") == [3]
+    assert ids("status=FYI") == [3]
+    assert ids("since=2999-01-01") == [] and ids("until=2999-01-01") == [1, 2, 3]
+    assert ids("limit=1") == [3]  # the latest, still oldest first
+    assert bus.call("GET", "/api/messages?status=NOPE", ADMIN)[0] == 400
+    r = cli(bus, ["messages", "--brief"], tmp_path)
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.decode().splitlines()
+    assert len(lines) == 3 and lines[0].endswith("acked: antigravity@r") and lines[1].endswith("acked: -")
+    out = cli(bus, ["messages", "--thread", "a"], tmp_path).stdout.decode()
+    assert "first" in out and "second" in out and "third" not in out and "acked: antigravity@r at " in out
+    assert cli(bus, ["messages", "--from", "codex"], tmp_path).stdout.decode().strip() == "No messages match."

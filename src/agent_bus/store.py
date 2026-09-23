@@ -431,6 +431,38 @@ class Store:
         rows = self.db.execute(SELECT + " WHERE repo = ? AND thread = ? ORDER BY id", (repo, thread)).fetchall()
         return [row_to_message(r) for r in rows]
 
+    @locked
+    def messages(self, repo=None, thread=None, sender=None, to=None, status=None, since=None, until=None, limit=200):
+        """The mail itself across threads, oldest first, each with the receipt scopes that acked
+        it: the owner's view beside `ledger`. `sender` and `to` match by prefix, so a harness, a
+        harness in a repo, or one instance all work; `since` and `until` compare against the
+        stored timestamp, which sorts as text. The daemon admits only the admin token here."""
+        if status is not None and status not in STATUSES:
+            raise ValueError(f"bad status {status!r}: one of {', '.join(STATUSES)}")
+        clauses, args = [], []
+        for column, value in (("repo", repo), ("thread", thread), ("status", status)):
+            if value:
+                clauses.append(f"{column} = ?")
+                args.append(value)
+        for column, value in (("sender", sender), ("recipient", to)):
+            if value:
+                # A plain prefix, not LIKE: addresses may contain '_', which LIKE would treat as a wildcard.
+                clauses.append(f"substr({column}, 1, length(?)) = ?")
+                args += [value, value]
+        for op, value in ((">=", since), ("<=", until)):
+            if value:
+                clauses.append(f"ts {op} ?")
+                args.append(value)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        rows = self.db.execute(f"{SELECT}{where} ORDER BY id DESC LIMIT ?", args + [int(limit)]).fetchall()
+        ids = [r[0] for r in rows]
+        acks = {}
+        if ids:
+            marks = ", ".join("?" * len(ids))
+            for mid, reader, ts in self.db.execute(f"SELECT message_id, reader, ts FROM receipts WHERE message_id IN ({marks}) ORDER BY ts, reader", ids):
+                acks.setdefault(mid, []).append({"reader": reader, "ts": ts})
+        return [{**row_to_message(r), "acked": acks.get(r[0], [])} for r in reversed(rows)]
+
     # ledger
 
     def record(self, event, identity, message_id=None, body=None, subject=None):

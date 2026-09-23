@@ -118,6 +118,7 @@ agent-bus show <thread>
 agent-bus hook --agent claude|antigravity
 sudo /opt/agent-bus/bin/agent-bus show <thread> --repo <repo> --audit
 sudo /opt/agent-bus/bin/agent-bus ledger
+sudo /opt/agent-bus/bin/agent-bus messages [--thread <slug>] [--from <harness>] [--since <iso>] [--brief|--json]   # the mail itself, with who acked
 sudo /opt/agent-bus/bin/agent-bus register            # HTML audit page into internal/register/
 sudo /opt/agent-bus/bin/agent-bus enroll <harness> [--machine <name>]
 ```

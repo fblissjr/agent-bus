@@ -286,6 +286,7 @@ The same four operations under `/api/`, plus what only the CLI needs:
 | `GET /api/whoami?repo=` | participants | the address the daemon would sign for this caller |
 | `POST /api/enroll` | admin | mint a participant token |
 | `GET /api/ledger` | admin | the audit trail and the chain check |
+| `GET /api/messages` | admin | every message across threads with the receipts that acked it, filtered by `repo`, `thread`, `from`, `to`, `status`, `since`, `until`, `limit`; what `agent-bus messages` prints |
 | `GET /api/export` | admin | every table's rows and the live schema, never a token hash; what `agent-bus register` renders |
 
 Every request carries `Authorization: Bearer <token>`. A missing or unknown
@@ -524,6 +525,17 @@ with the rows, producing one self-contained page (a timeline against the
 commits, every envelope, the tables with filters and resizable columns, and
 the shared vocabulary) under the gitignored `internal/register/`. The
 template is repo content; the page never is.
+
+The same in the terminal is `agent-bus messages`, the sibling of
+`agent-bus ledger`: the ledger lists events with body hashes, and
+`messages` lists the mail itself, every envelope across every thread with
+who acked it and when. Both take the admin token on the host and no token
+on the simulator. Filters are structured (`--repo`, `--thread`, `--from`,
+`--to`, `--status`, `--since`, `--until`, `--limit`) rather than SQL, so
+the CLI stays free of the schema; `--json` carries the receipts for
+anything finer, and `--brief` is one line per message. Sender and
+recipient filters match by prefix, so `--from claude`, `--from
+claude@agent-bus`, and a full address all work.
 
 ## The simulator
 

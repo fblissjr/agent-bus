@@ -197,11 +197,13 @@ def direct_call(endpoint, harness, method="GET", payload=None, instance=None):
         store = st.Store(sim_dir(), sim=True)
         if path == "/api/enroll":
             raise ValueError("the simulator has no tokens; the harness comes from the environment or --as")
-        if path in ("/api/ledger", "/api/export"):
+        if path in ("/api/ledger", "/api/export", "/api/messages"):
             if harness != st.ADMIN:
                 raise ValueError(f"{path} is read with the admin token only")
             if path == "/api/ledger":
                 return {"first_bad_seq": store.verify_ledger(), "rows": store.ledger(limit=q.get("limit", 200), harness=q.get("harness"))}
+            if path == "/api/messages":
+                return store.messages(repo=q.get("repo"), thread=q.get("thread"), sender=q.get("from"), to=q.get("to"), status=q.get("status"), since=q.get("since"), until=q.get("until"), limit=q.get("limit", 200))
             return {"generated": st.now(), "source": str(store.state_dir), "first_bad_seq": store.verify_ledger(), **store.export()}
         if path == "/api/thread":
             return store.thread(identity, q["repo"], q["thread"], audit=harness == st.ADMIN)
@@ -409,6 +411,28 @@ def cmd_ledger(args):
         print(f"{r['seq']:>6}  {r['ts']}  {r['event']:<6} {who:<34} {(r.get('subject') or ''):<36} msg={r['message_id'] or '-'}")
 
 
+def cmd_messages(args):
+    """The owner's view of the mail across threads, with who acked each message: the
+    sibling of `ledger`, which shows the events. Filters are structured, not SQL; `--json`
+    is there for anything finer."""
+    fields = (("repo", args.repo), ("thread", args.thread), ("from", args.sender), ("to", args.to), ("status", args.status), ("since", args.since), ("until", args.until), ("limit", args.limit))
+    query = urllib.parse.urlencode({k: v for k, v in fields if v})
+    msgs = admin_call(args, f"/api/messages?{query}")
+    if args.json:
+        print(json.dumps(msgs, indent=2))
+    elif not msgs:
+        print("No messages match.")
+    elif args.brief:
+        for m in msgs:
+            acked = ", ".join(a["reader"] for a in m["acked"]) or "-"
+            print(f"{m['id']:>5}  {m['ts']}  {m['status']:<8} {m['from']:<32} -> {m['to']:<24} {m['repo']}/{m['thread']:<20} acked: {acked}")
+    else:
+        for m in msgs:
+            print(format_envelope(m))
+            if m["acked"]:
+                print("acked: " + ", ".join(f"{a['reader']} at {a['ts']}" for a in m["acked"]) + "\n")
+
+
 def git_log():
     """The checkout's commits, oldest first, for the register's timeline; empty outside a repo."""
     try:
@@ -566,6 +590,19 @@ def main():
     p_ledger.add_argument("--harness", dest="harness_filter", help="Only this harness's rows")
     p_ledger.add_argument("--json", action="store_true", help="Output JSON")
     p_ledger.set_defaults(func=cmd_ledger)
+
+    p_msgs = subparsers.add_parser("messages", help="Every message across threads, with who acked it (admin token only; the mail beside the ledger's events)")
+    p_msgs.add_argument("--repo", help="Only this repo")
+    p_msgs.add_argument("--thread", help="Only this thread")
+    p_msgs.add_argument("--from", dest="sender", help="Sender prefix: a harness, harness@repo, or a full address")
+    p_msgs.add_argument("--to", help="Recipient prefix, the same way")
+    p_msgs.add_argument("--status", choices=["REQUEST", "ANSWER", "DONE", "BLOCKED", "FYI"])
+    p_msgs.add_argument("--since", help="ISO UTC lower bound, e.g. 2026-09-23 or 2026-09-23T15:00:00Z")
+    p_msgs.add_argument("--until", help="ISO UTC upper bound")
+    p_msgs.add_argument("--limit", type=int, default=200, help="The latest N matches, printed oldest first")
+    p_msgs.add_argument("--brief", action="store_true", help="One line per message")
+    p_msgs.add_argument("--json", action="store_true", help="Output JSON, each message with its receipts")
+    p_msgs.set_defaults(func=cmd_messages)
 
     p_register = subparsers.add_parser("register", help="Render the owner's audit page from the admin export (admin token only)")
     p_register.add_argument("--out", help="Where to write the page (default: internal/register/<date>-register.html under the current directory)")
