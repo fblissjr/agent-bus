@@ -9,12 +9,17 @@ The admin path (enroll, ledger, show --audit) reads the admin token from the
 daemon's state directory. Under sudo that is the system state directory;
 $STATE_DIRECTORY exists only inside the service. Nothing is ever written
 under root's home: enroll as root prints the token and the owner places it.
+
+The simulator: with AGENT_BUS_SIM_DIR set, every command opens a marked store
+in this process instead of calling the daemon. Identity is whatever the
+environment or --as claims, and every ledger row says so. Test data only.
 """
 
 import argparse
 import json
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import urllib.error
@@ -29,6 +34,9 @@ AGENTS = Path(os.environ.get("AGENTS") or (Path.home() / ".agents"))
 TOKENS = AGENTS / "tokens"
 SYSTEM_STATE_DIR = Path("/var/lib/agent-bus")
 HARNESSES = ("claude", "antigravity", "codex", "owner")
+# Where `agent-bus sim init` puts the store when not told otherwise: the checkout's
+# gitignored data directory.
+DEFAULT_SIM_DIR = Path("data")
 
 
 class BusError(Exception):
@@ -159,6 +167,71 @@ def api_call(endpoint, token, method="GET", payload=None, instance=None):
         raise BusError(f"cannot reach agent-bus daemon at {DEFAULT_SERVER}: {e.reason}")
 
 
+# the simulator: the same operations against a marked store in this process
+
+def sim_dir():
+    """The simulator directory, or None. Set explicitly or not at all: a daemon that is
+    down never turns into a store opened directly."""
+    value = os.environ.get("AGENT_BUS_SIM_DIR")
+    return Path(value) if value else None
+
+
+def store_module():
+    # The hook runs this file as a script with --no-project, so the package is not on the path.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from agent_bus import store
+    return store
+
+
+def direct_call(endpoint, harness, method="GET", payload=None, instance=None):
+    """What api_call does over HTTP, dispatched to the store in this process. The daemon
+    verifies a harness from its token; here the harness is claimed, and the row's machine
+    and peer say so. `admin` audits and cannot take part, as on the daemon."""
+    st = store_module()
+    path, _, query = endpoint.partition("?")
+    q = dict(urllib.parse.parse_qsl(query))
+    p = payload or {}
+    pid = os.environ.get("CLAUDE_PID") or os.getppid()
+    identity = st.Identity(harness=harness, instance=instance, host=socket.gethostname(), pid=int(pid), cwd=os.getcwd(), peer=st.SIM_PEER, machine=st.SIM_MACHINE)
+    try:
+        store = st.Store(sim_dir(), sim=True)
+        if path == "/api/enroll":
+            raise ValueError("the simulator has no tokens; the harness comes from the environment or --as")
+        if path in ("/api/ledger", "/api/export"):
+            if harness != st.ADMIN:
+                raise ValueError(f"{path} is read with the admin token only")
+            if path == "/api/ledger":
+                return {"first_bad_seq": store.verify_ledger(), "rows": store.ledger(limit=q.get("limit", 200), harness=q.get("harness"))}
+            return {"generated": st.now(), "source": str(store.state_dir), "first_bad_seq": store.verify_ledger(), **store.export()}
+        if path == "/api/thread":
+            return store.thread(identity, q["repo"], q["thread"], audit=harness == st.ADMIN)
+        if harness == st.ADMIN:
+            raise ValueError("the admin token cannot send or read; enroll a participant")
+        if path == "/api/send":
+            return store.send(identity, p["to"], p["repo"], p["status"], p["body"], verb=p.get("verb"), sha=p.get("sha"), files=p.get("files"), thread=p.get("thread"))
+        if path == "/api/inbox":
+            return store.inbox(identity, p["me"])
+        if path == "/api/ack":
+            return {"acked": store.ack(identity, p["me"], p["ids"])}
+        if path == "/api/who":
+            return store.who()
+        if path == "/api/whoami":
+            repo = q.get("repo") or Path(os.getcwd()).name
+            return {"harness": harness, "machine": identity.machine, "instance": instance, "host": identity.host, "address": identity.address(repo)}
+        raise ValueError(f"no route {path}")
+    except (ValueError, KeyError) as e:
+        raise BusError(str(e))
+    except sqlite3.Error as e:
+        raise BusError(f"store error: {e}")
+
+
+def admin_call(args, endpoint, method="GET", payload=None, instance=None):
+    """The admin path: the daemon's admin token from its state directory, or the simulator with no token at all."""
+    if sim_dir():
+        return direct_call(endpoint, store_module().ADMIN, method, payload, instance)
+    return api_call(endpoint, get_admin_token(admin_state_dir(args.state_dir)), method, payload, instance)
+
+
 class Caller:
     """Everything a command needs to speak as one participant instance. The token is
     read only when a call is made, so audit commands never need a participant token."""
@@ -180,6 +253,8 @@ class Caller:
         return address(self.harness, self.repo, self.instance)
 
     def call(self, endpoint, method="GET", payload=None):
+        if sim_dir():
+            return direct_call(endpoint, self.harness, method, payload, self.instance)
         return api_call(endpoint, self.token, method, payload, self.instance)
 
 
@@ -289,8 +364,7 @@ def cmd_show(args):
     repo = args.repo or c.repo
     thread = args.thread or "general"
     query = urllib.parse.urlencode({"repo": repo, "thread": thread})
-    token = get_admin_token(admin_state_dir(args.state_dir)) if args.audit else c.token
-    msgs = api_call(f"/api/thread?{query}", token, instance=c.instance)
+    msgs = admin_call(args, f"/api/thread?{query}", instance=c.instance) if args.audit else c.call(f"/api/thread?{query}")
     if args.json:
         print(json.dumps(msgs, indent=2))
     elif not msgs:
@@ -307,9 +381,8 @@ def cmd_whoami(args):
 
 
 def cmd_enroll(args):
-    admin = get_admin_token(admin_state_dir(args.state_dir))
     machine = args.machine or socket.gethostname()
-    res = api_call("/api/enroll", admin, method="POST", payload={"name": args.name, "machine": machine})
+    res = admin_call(args, "/api/enroll", method="POST", payload={"name": args.name, "machine": machine})
     path = enrolled_token_destination(args.name, machine)
     if path is None:
         # Printed, not written: under root the file would land in root's home, and a token
@@ -324,9 +397,8 @@ def cmd_enroll(args):
 
 
 def cmd_ledger(args):
-    admin = get_admin_token(admin_state_dir(args.state_dir))
     query = urllib.parse.urlencode({k: v for k, v in (("limit", args.limit), ("harness", args.harness_filter)) if v})
-    res = api_call(f"/api/ledger?{query}", admin)
+    res = admin_call(args, f"/api/ledger?{query}")
     if args.json:
         print(json.dumps(res, indent=2))
         return
@@ -350,8 +422,7 @@ def cmd_register(args):
     """Render the owner's audit page: every message, receipt, presence row, participant, and
     ledger row through the admin export, into a self-contained HTML file. The template ships
     with the package; the output carries the data and is never repo content."""
-    admin = get_admin_token(admin_state_dir(args.state_dir))
-    data = api_call("/api/export", admin)
+    data = admin_call(args, "/api/export")
     data["commits"] = git_log()
     template = Path(__file__).with_name("register.html").read_text()
     blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
@@ -360,6 +431,18 @@ def cmd_register(args):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(template.replace("__DATA__", blob))
     print(f"{out}  ({len(data['messages'])} messages, {len(data['ledger'])} ledger rows)")
+
+
+def cmd_sim(args):
+    """Mark a directory as simulator state and say how to point every command and hook at it."""
+    st = store_module()
+    target = Path(args.dir or DEFAULT_SIM_DIR).resolve()
+    try:
+        marker = st.init_sim(target)
+    except (ValueError, OSError) as e:
+        raise BusError(str(e))
+    print(f"simulator state at {target} (marker {marker.name}); test data only, identities are claimed", file=sys.stderr)
+    print(f"export AGENT_BUS_SIM_DIR={target}")
 
 
 # hooks
@@ -487,6 +570,12 @@ def main():
     p_register = subparsers.add_parser("register", help="Render the owner's audit page from the admin export (admin token only)")
     p_register.add_argument("--out", help="Where to write the page (default: internal/register/<date>-register.html under the current directory)")
     p_register.set_defaults(func=cmd_register)
+
+    p_sim = subparsers.add_parser("sim", help="The simulator: a marked store the CLI and hooks use in-process, with no daemon (test data only)")
+    p_sim_sub = p_sim.add_subparsers(dest="sim_command", required=True)
+    p_sim_init = p_sim_sub.add_parser("init", help="Mark a directory as simulator state and print the export line")
+    p_sim_init.add_argument("dir", nargs="?", help="Directory (default: data/ under the current directory)")
+    p_sim_init.set_defaults(func=cmd_sim)
 
     p_hook = subparsers.add_parser("hook", help="Hook handler for agent session start / turn")
     p_hook.add_argument("--agent", required=True, choices=["claude", "antigravity"], help="Target agent")

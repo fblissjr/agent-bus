@@ -1,4 +1,4 @@
-last updated: 2026-09-22
+last updated: 2026-09-23
 
 # Roadmap
 
@@ -31,7 +31,9 @@ made the daemon validate everything before the first write (sender grammar,
 verb, files, acks limited to addressed mail), keep each write and its
 ledger row in one transaction, exclude own mail by session, and create
 every state file owner-only; the CLI requires `--thread`; the runbook and
-the design doc check group membership beside the sudo prompt.
+the design doc check group membership beside the sudo prompt. 0.5.4 added
+the simulator, a marked store the CLI and hooks use in-process with no
+daemon, for test data on one machine while the host waits for its cutover.
 
 The mechanism is `docs/design/system.md`; the host step is the runbook
 below, still the owner's to run.

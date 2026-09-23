@@ -1,4 +1,4 @@
-last updated: 2026-09-22
+last updated: 2026-09-23
 
 # Working in this repo as an agent
 
@@ -78,6 +78,11 @@ Your address here is `<harness>@agent-bus#<session>`; run `agent-bus
 whoami` before trusting history, and read rows marked `(you)` as your own.
 Send with `agent-bus send --to <harness>@agent-bus --status ... --thread
 <slug>`; ack what the hook shows you after you have read it.
+
+With `AGENT_BUS_SIM_DIR` set you are on the simulator: the store is
+`./data` (gitignored), identities are claimed, and nothing there is bus
+traffic. Test data only. The file-claim rule above still applies to the
+repo's files; the simulator changes where mail lives, not who edits what.
 
 ## Never
 

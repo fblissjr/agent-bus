@@ -32,11 +32,10 @@ from mcp.types import ToolAnnotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from agent_bus.store import DEFAULT_STATE_DIR, Identity, Message, Reader, Store, inbox_uri, now
+from agent_bus.store import ADMIN, DEFAULT_STATE_DIR, Identity, Message, Reader, Store, inbox_uri, now
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
-ADMIN = "admin"
 # The tool and resource catalog only changes when the daemon is redeployed.
 LIST_TTL_MS = 3_600_000
 
@@ -262,6 +261,10 @@ def main():
     if state_dir is None:
         state_dir = DEFAULT_STATE_DIR
         log.warning("state under %s: development only. No uid boundary; every process of this user can read and rewrite the store and the ledger.", state_dir)
-    store = Store(state_dir)
+    try:
+        store = Store(state_dir)
+    except ValueError as e:
+        # A simulator directory is never served: its rows were written by whoever claimed them.
+        raise SystemExit(f"agent-bus-daemon: {e}")
     admin_token = load_admin_token(state_dir / "admin.token")
     uvicorn.run(build_app(args.host, store, admin_token), host=args.host, port=args.port, log_level="info")

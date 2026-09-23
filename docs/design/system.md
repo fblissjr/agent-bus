@@ -1,8 +1,8 @@
-last updated: 2026-09-22
+last updated: 2026-09-23
 
 # agent-bus, end to end
 
-How the whole system works as of 0.5.3: what runs where, how a message gets
+How the whole system works as of 0.5.4: what runs where, how a message gets
 from one agent to another, how the daemon knows who sent it, who is allowed
 to read what, and what happens when something is down. `PROTOCOL.md` is the
 contract both agents signed and states the rules once; this document is the
@@ -477,6 +477,8 @@ and `CHANGELOG.md`.
 | ack call fails after printing | duplicate on the next prompt, never a loss |
 | two instances of one harness in a repo | both see a broadcast until one acks; each sees only its own instance-addressed mail |
 | a row edited in the store directly | `verify_ledger` names the sequence number; with the uid boundary it cannot happen from a participant |
+| `AGENT_BUS_SIM_DIR` names a directory without the marker | hooks silent; the CLI names the `sim init` command; nothing is created |
+| the daemon is pointed at a simulator directory | refused at startup, before it listens |
 | a send or ack that fails validation | refused before any write: no row, no ledger entry, no projection, no push |
 | a database error inside a call | a JSON error or tool error naming the daemon log, never a traceback or a half-written call |
 | agent loses context | `whoami` and the SessionStart line restore identity; `show` marks its own rows |
@@ -514,7 +516,7 @@ mail, own mail excluded by session, the MCP path carrying the caller,
 per-machine enrollment, the CLI's admin path needing no participant token,
 enroll printing for another machine, the 0.3 and 0.4 migrations, the
 admin-only export, and the register page rendered from the packaged
-template.
+template; `tests/test_sim.py` covers the simulator below.
 
 The owner's view of everything is `agent-bus register`: it reads
 `/api/export` with the admin token and fills `src/agent_bus/register.html`
@@ -522,6 +524,52 @@ with the rows, producing one self-contained page (a timeline against the
 commits, every envelope, the tables with filters and resizable columns, and
 the shared vocabulary) under the gitignored `internal/register/`. The
 template is repo content; the page never is.
+
+## The simulator
+
+A test bed that needs no daemon, no token, no root, and no host.
+`agent-bus sim init [dir]` marks a directory (`data/` under the checkout
+by default, which is gitignored) with `store.py::SIM_MARKER` and creates
+the schema. With `AGENT_BUS_SIM_DIR` exported to that directory, every CLI
+command, and therefore every hook, opens the store in its own process
+(`cli.py::direct_call`) instead of calling the daemon. The same `Store`
+methods run, so addressing, receipt scope, thread membership, the ledger
+chain, and the projections behave as they do behind the daemon, and
+delivery still happens only at turn boundaries through the hooks. Nothing
+is woken; the owner's ruling is untouched. Set the variable in the shell
+that starts each harness and the hooks inherit it.
+
+What differs, stated plainly:
+
+- Identity is claimed. There is no token; the harness comes from the
+  environment or `--as`, and one session may speak as any harness, which is
+  how a scenario is seeded from one terminal. Every ledger row written this
+  way carries `store.py::SIM_MACHINE` as its machine and `store.py::SIM_PEER`
+  as its peer, so a simulator row can never pass for a verified one.
+- There is no uid boundary. The store, the ledger, and the projections sit
+  in the checkout, readable at the owner's uid, so the ledger there is a
+  record, not a proof. `ledger`, `register`, and `show --audit` need no
+  admin token; `enroll` is refused.
+- Many writers. Each CLI invocation is its own process, so every write
+  takes the lock at `BEGIN IMMEDIATE` and waits up to
+  `store.py::BUSY_TIMEOUT_MS` for another's transaction. The daemon, one
+  process behind one lock, inherits both without effect.
+
+The marker decides which door a directory has. The CLI opens a directory
+in-process only when the marker is present, and the daemon refuses to serve
+one that has it, so simulator data is never served as production and
+production state is never opened directly. The switch is the environment
+variable and nothing else: a daemon that is down never becomes a store
+opened directly, and an unmarked or missing directory leaves the hook
+silent, like a down daemon.
+
+The simulator is outside `PROTOCOL.md`. It is not a participant path and
+nothing written in it is bus traffic. It exists so that sessions in several
+harnesses can exchange mail through their real hooks on one machine before
+the host is cut over, and so the register and the thread rules can be
+exercised on disposable data. It does not cross machines: a second machine
+would need its own directory, and joining two would mean rewriting chained
+rows, which the ledger never does.
 
 ## Spec alignment
 
@@ -594,3 +642,5 @@ are a record of what was considered.
 | address grammar | `src/agent_bus/store.py::ADDRESS` |
 | ledger hash and genesis | `src/agent_bus/store.py::ledger_hash`, `::GENESIS` |
 | harness and instance detection | `src/agent_bus/cli.py::detect_harness`, `::detect_instance` |
+| simulator marker, stamps, and write wait | `src/agent_bus/store.py::SIM_MARKER`, `::SIM_MACHINE`, `::SIM_PEER`, `::BUSY_TIMEOUT_MS` |
+| simulator default directory and transport | `src/agent_bus/cli.py::DEFAULT_SIM_DIR`, `::direct_call` |

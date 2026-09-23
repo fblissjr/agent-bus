@@ -2,7 +2,7 @@
   <img src="assets/agent-bus-banner.jpg" alt="agent-bus" width="100%">
 </p>
 
-last updated: 2026-09-22
+last updated: 2026-09-23
 
 # agent-bus
 
@@ -92,6 +92,20 @@ Planned. Manual form today: `codex mcp add --url ... --bearer-token-env-var AGEN
 Add the MCP URL with the bearer header and read `agent-bus://protocol`, or
 POST to `/api/` with the CLI or curl.
 
+## Simulator
+
+A test bed with no daemon, no tokens, and no root: the CLI and the hooks
+open a marked store in-process. Identities are claimed and every ledger
+row says so. Test data only; see `docs/design/system.md`.
+
+```
+agent-bus sim init            # marks data/ under the checkout (gitignored) and prints the export line
+export AGENT_BUS_SIM_DIR=...  # in the shell that starts each harness; the hooks inherit it
+```
+
+Every command below then works without a daemon, `enroll` aside. The
+daemon refuses to serve a marked directory.
+
 ## CLI
 
 ```
@@ -126,7 +140,7 @@ docs/ops/cutover.md            moving a live host to the system unit
 .claude-plugin/                Claude Code plugin manifest and marketplace
 plugin.json, hooks.json        Antigravity plugin manifest and hook
 .mcp.json, hooks/, skills/     Claude plugin content
-tests/                         hook against a stub server; daemon on a real socket
+tests/                         hook against a stub server; daemon on a real socket; the simulator with no daemon
 docs/design/                   system.md, identity-hardening.md, groups.md
 ```
 

@@ -34,6 +34,8 @@ from typing import TypedDict
 from urllib.parse import quote
 
 DEFAULT_STATE_DIR = Path.home() / ".agents"
+# The daemon's own identity: enrolls and audits, never takes part.
+ADMIN = "admin"
 
 STATUSES = ("REQUEST", "ANSWER", "DONE", "BLOCKED", "FYI")
 VERBS = ("review", "implement", "test", "answer")
@@ -41,6 +43,17 @@ DEFAULT_THREAD = "general"
 DEFAULT_INSTANCE = "default"
 # An instance counts as active in who() if it called any tool within this window.
 ACTIVE_WINDOW = timedelta(minutes=15)
+# How long a writer waits for another process's transaction before giving up. Only the
+# simulator has more than one writer process; the daemon is one process behind one lock.
+BUSY_TIMEOUT_MS = 5000
+
+# A simulator directory carries this marker. The CLI opens the store in-process only
+# when it is present; the daemon refuses to serve a directory that has it. Rows written
+# that way are stamped with SIM_MACHINE and SIM_PEER, because nothing verified them.
+SIM_MARKER = "SIMULATOR"
+SIM_MACHINE = "sim"
+SIM_PEER = "direct"
+SIM_MARKER_TEXT = "agent-bus simulator state: identities are claimed, not verified; no daemon, no uid boundary. Test data only. Never copy this directory into a daemon's state directory.\n"
 
 # repo, thread, and machine become path components or address parts.
 SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -206,12 +219,30 @@ def locked(fn):
     return wrapper
 
 
+def init_sim(state_dir):
+    """Mark a directory as simulator state and open it once so the schema exists. Returns the marker path."""
+    state_dir = Path(state_dir)
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker = state_dir / SIM_MARKER
+    if not marker.exists():
+        marker.write_text(SIM_MARKER_TEXT)
+    Store(state_dir, sim=True)
+    return marker
+
+
 class Store:
-    def __init__(self, state_dir=DEFAULT_STATE_DIR):
+    def __init__(self, state_dir=DEFAULT_STATE_DIR, sim=False):
         # Everything this process creates is owner-only from the first byte, including the
         # SQLite write-ahead log and shared-memory files, which SQLite creates with the umask.
         os.umask(0o077)
         self.state_dir = Path(state_dir)
+        # The marker decides which door a directory has: the daemon for real state, the
+        # CLI in-process for simulator state, never both.
+        marked = (self.state_dir / SIM_MARKER).exists()
+        if sim and not marked:
+            raise ValueError(f"{self.state_dir} is not a simulator directory; run 'agent-bus sim init {self.state_dir}'")
+        if marked and not sim:
+            raise ValueError(f"{self.state_dir} is a simulator directory and cannot be served by the daemon")
         self.state_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(self.state_dir, 0o700)
         self.threads_dir = self.state_dir / "threads"
@@ -219,11 +250,12 @@ class Store:
         db_path = self.state_dir / "store.db"
         # MCP tools run in worker threads and the /api routes on the event loop;
         # one connection behind one lock serves both and keeps projection appends ordered.
-        self.db = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
+        self.db = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False, timeout=BUSY_TIMEOUT_MS / 1000)
         os.chmod(db_path, 0o600)
         self.lock = threading.Lock()
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA foreign_keys=ON")
+        self.db.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
         self.db.executescript(SCHEMA)
         self.migrate()
 
@@ -260,7 +292,7 @@ class Store:
             raise ValueError(f"bad participant name {name!r}")
         check_slug("machine", machine)
         token = secrets.token_urlsafe(32)
-        self.db.execute("BEGIN")
+        self.db.execute("BEGIN IMMEDIATE")
         try:
             self.db.execute("INSERT INTO participants (name, machine, token_hash, ts) VALUES (?, ?, ?, ?) ON CONFLICT(name, machine) DO UPDATE SET token_hash = excluded.token_hash, ts = excluded.ts", (name, machine, token_hash(token), now()))
             self.record("enroll", identity, subject=f"{name}@{machine}")
@@ -306,7 +338,7 @@ class Store:
             if not isinstance(f, str) or not f.strip() or f.startswith("/") or f.startswith("~") or "\n" in f:
                 raise ValueError(f"bad file path {f!r}: repo-relative paths only")
         sender = identity.address(repo)
-        self.db.execute("BEGIN")
+        self.db.execute("BEGIN IMMEDIATE")
         try:
             cur = self.db.execute(
                 "INSERT INTO messages (ts, sender, harness, recipient, to_agent, to_repo, to_instance, repo, thread, status, verb, sha, files, body)"
@@ -367,7 +399,7 @@ class Store:
         self.touch(identity, me)
         ts = now()
         scope = receipt_scope(me)
-        self.db.execute("BEGIN")
+        self.db.execute("BEGIN IMMEDIATE")
         try:
             self.db.executemany("INSERT OR IGNORE INTO receipts (message_id, reader, ts) VALUES (?, ?, ?)", [(i, scope, ts) for i in ids])
             for i in ids:

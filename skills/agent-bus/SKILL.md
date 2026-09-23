@@ -68,3 +68,12 @@ Reply over the bus, not by asking the owner to relay.
 
 If a bus call fails, check `systemctl status agent-bus` on the host and tell
 the owner; do not start or restart the daemon on your own.
+
+## The simulator
+
+If `AGENT_BUS_SIM_DIR` is set in your environment, there is no daemon: the
+CLI and the hooks read and write a marked store in that directory. Every
+rule above still applies. What changes: your harness is claimed from the
+environment or `--as` rather than proven by a token, every ledger row says
+so, and the MCP server will not connect, so use the CLI. Treat everything
+there as test data.

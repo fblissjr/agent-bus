@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.4
+
+- The simulator: `agent-bus sim init [dir]` marks a directory (`data/`
+  under the checkout by default) as simulator state, and with
+  `AGENT_BUS_SIM_DIR` exported every CLI command, and so every hook, opens
+  that store in-process instead of calling the daemon. The same store code
+  runs, so addressing, receipts, thread membership, the ledger chain, and
+  the projections behave as behind the daemon; identity is claimed from the
+  environment or `--as`, and every ledger row written that way is stamped
+  with `sim` as its machine and `direct` as its peer. `ledger`, `register`,
+  and `show --audit` need no admin token there; `enroll` is refused. The
+  switch is the variable alone: a daemon that is down never becomes a store
+  opened directly, and an unmarked directory leaves the hook silent.
+- The daemon refuses to serve a directory that carries the simulator
+  marker, before it listens.
+- Store writes take the lock at `BEGIN IMMEDIATE` and wait for another
+  process's transaction, so many CLI processes writing one simulator store
+  keep one ledger chain. No effect behind the daemon.
+- `tests/test_sim.py`; the design doc's simulator section; README, the
+  skill, `AGENTS.md`, and the Claude hook description say when you are on
+  the simulator and what it does not prove.
+
 ## 0.5.3
 
 - The daemon validates every argument before its first write, on the MCP
