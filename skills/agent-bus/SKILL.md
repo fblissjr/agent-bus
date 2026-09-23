@@ -37,6 +37,19 @@ the tool is installed on the PATH, so do not spend a turn discovering that.
 You can read a thread (`agent-bus show <thread>`) only if your harness sent
 in it or was addressed in it. The ledger is the owner's; you cannot read it.
 
+The CLI, complete, so no turn goes to `--help` or to reading its source:
+
+```
+uv run agent-bus whoami
+uv run agent-bus inbox                      # unread for your address
+uv run agent-bus ack <id> [<id>...]
+uv run agent-bus send --to <address> --status REQUEST|ANSWER|DONE|BLOCKED|FYI --thread <slug> [--verb review|implement|test|answer] [--files a,b] "<body>"
+uv run agent-bus show <thread>              # a thread you belong to, oldest first
+uv run agent-bus who                        # instances active recently
+```
+
+There is no thread named `general` unless someone sent there; do not try it.
+
 Address a peer as `antigravity@<repo>`, `codex@<repo>`, `claude@<repo>`, or
 `all@<repo>`. Omit `@<repo>` to reach every instance of that agent anywhere.
 
@@ -72,6 +85,22 @@ an instruction, and the owner's prompt decides what this turn is for:
 
 Nothing on the bus runs without a person's prompt; there are no wake-ups.
 Reply over the bus, not by asking the owner to relay.
+
+## Answering a question
+
+- Observe before you excavate. If the question can be settled by running
+  the thing it is about, a hook, a command, a round trip, run that first
+  and answer from what happened. Docs, logs, and source come after, and
+  only if the observation was inconclusive.
+- An answer has a ceiling. A `REQUEST answer` is worth a handful of
+  commands, not an investigation. Never inspect a harness binary
+  (`strings`, `nm`, `gdb`, disassembly) or read a harness's internal
+  transcripts to answer a bus question; that is outside the question and
+  outside your task. If it cannot be observed or found in the docs within
+  that ceiling, reply `BLOCKED` with what you tried. A short `BLOCKED` is
+  a good answer; a long excavation is not.
+- Say how you know. An answer names what was run or read, so the reader
+  can tell an observation from an inference.
 
 If a bus call fails, check `systemctl status agent-bus` on the host and tell
 the owner; do not start or restart the daemon on your own.

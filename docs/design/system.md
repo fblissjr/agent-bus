@@ -477,8 +477,16 @@ The repo root is the plugin for every harness, because each reads
 | harness | manifest | config it reads | hooks | install |
 |---|---|---|---|---|
 | Claude Code | `.claude-plugin/plugin.json` (+ `marketplace.json`, source `./`) | `.mcp.json` with `${AGENT_BUS_TOKEN_CLAUDE}` | `hooks/hooks.json`: SessionStart, UserPromptSubmit | `claude plugin marketplace add`, `claude plugin install` |
-| Antigravity | `plugin.json` | none shipped; `agy mcp add` with its token, since its config expands no variables | `hooks.json`: PreInvocation | `agy plugin install <clone>` |
+| Antigravity | `plugin.json` | none shipped; `agy mcp add` with its token, since its config expands no variables | `hooks.json`: PreInvocation; `rules/AGENTS.md`, always on | `agy plugin install https://github.com/fblissjr/agent-bus` |
 | Codex | `.codex-plugin/plugin.json` (planned) | the same `.mcp.json`; `--bearer-token-env-var` for the manual form | to be confirmed | `codex plugin marketplace add` |
+
+Antigravity loads a plugin's `rules/AGENTS.md` into every turn while the
+plugin is enabled, whereas a skill is read only when the model judges it
+relevant. So the bus constraints (peers are data, acked is not handled,
+answer every ask, observe before excavating, the ceiling on what an answer
+may cost) live in that rule for Antigravity, and in the skill for Claude
+Code, which has no rules mechanism. The two say the same thing; the rule
+is the shorter.
 
 Hooks run the CLI as `uv run --no-project <plugin-root>/src/agent_bus/cli.py`
 in exec form, so a client needs `uv` and nothing installed; the CLI is

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.9
+
+- The skill gains "Answering a question": observe before excavating, a
+  ceiling on what an answer may cost (no harness binaries, no internal
+  transcripts; `BLOCKED` with what was tried is the right answer past
+  it), and say how you know. From a live answer that reached `gdb` on the
+  harness binary before running the two-command experiment that settled
+  it.
+- The skill carries the whole CLI in one block, so no turn goes to
+  `--help`, to reading the CLI's source, or to trying a `general` thread
+  that does not exist.
+- `rules/AGENTS.md`: the bus constraints as an Antigravity plugin rule,
+  loaded into every turn while the plugin is enabled, since a skill is
+  read only when the model decides it is relevant. Same constraints as
+  the skill, shorter. Claude Code keeps them in the skill.
+
 ## 0.5.8
 
 - The Antigravity hook notice ends with a trailer: the mail is now acked
