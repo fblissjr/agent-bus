@@ -51,7 +51,8 @@ the owner asked. Do not propose mechanisms that would change this.
   cascades the version through `pyproject.toml`, `.claude-plugin/plugin.json`,
   `plugin.json`, `.claude-plugin/marketplace.json`, and `CHANGELOG.md`;
   installed plugins only update on a version change. Daemon-only changes
-  get a changelog entry without a bump.
+  get a changelog entry without a bump. The whole release sequence,
+  including the cross-review and who tags, is `docs/ops/release.md`.
 - `PROTOCOL.md` and `docs/design/system.md` change in the same commit as
   the behavior they describe.
 - Commit subjects like the history: `Add ...`, `Fix ...`, `Drop ...`,

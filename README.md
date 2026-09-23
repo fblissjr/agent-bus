@@ -39,8 +39,9 @@ sudo systemctl enable --now agent-bus
 sudo -k
 ```
 
-Re-run the script on each release. Moving an existing development daemon
-to the system unit is `docs/ops/cutover.md`. For development,
+Re-run the script on each release; the release steps, from version bump
+to client update, are `docs/ops/release.md`. Moving an existing
+development daemon to the system unit is `docs/ops/cutover.md`. For development,
 `agent-bus-daemon` in the foreground keeps state under `$AGENTS` with no
 uid boundary.
 
@@ -138,6 +139,7 @@ src/agent_bus/register.html    template for `agent-bus register`
 systemd/agent-bus.service      the system unit
 scripts/deploy-host.sh         the per-release root step
 docs/ops/cutover.md            moving a live host to the system unit
+docs/ops/release.md            the per-release steps, from bump to client update
 .claude-plugin/                Claude Code plugin manifest and marketplace
 plugin.json, hooks.json        Antigravity plugin manifest and hook
 .mcp.json, hooks/, skills/     Claude plugin content
