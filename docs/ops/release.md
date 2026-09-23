@@ -26,16 +26,21 @@ exact lines it objects to. Nothing is pushed until that answer exists; if
 something was pushed early, the review still happens and objections are
 fixed forward in a new commit. On the simulator this works with no daemon.
 
-## 3. Tag and push
+## 3. Push; the tag follows
 
-The pusher is not the author of the range. A tag names the commit a
-release is, so the deploy script installs something the owner has looked
-at rather than whatever the clone holds.
+The pusher is not the author of the range.
 
 ```
-git tag v<version> <commit>
-git push origin main --tags
+git push origin main
 ```
+
+A tag names the commit a release is, so the deploy script installs
+something the owner has looked at rather than whatever the clone holds.
+`.github/workflows/tag-release.yml` creates `v<version>` from
+`pyproject.toml` on every push to main that changes that file, and never
+moves a tag that exists. Nothing to run by hand; a release that was
+pushed before the workflow existed is tagged once with
+`git tag v<version> <commit> && git push origin v<version>`.
 
 ## 4. The host
 
@@ -55,18 +60,22 @@ this, and only after a restart of the harness so the new hook and skill
 load:
 
 ```
-agy plugin install .                      # Antigravity, from the checkout root
-claude plugin marketplace update agent-bus && claude plugin update agent-bus@agent-bus   # Claude Code, from the pushed repo
+claude plugin marketplace update agent-bus && claude plugin update agent-bus@agent-bus   # Claude Code, from GitHub
+git checkout "v<version>" && agy plugin install . && git checkout main               # Antigravity, from the tagged commit
 ```
 
-Antigravity's install copies the whole clone into its plugin directory,
-including untracked files, so it is local to that machine and nothing to
-share. Claude Code installs from the marketplace, so the push in step 3
-has to land first.
+Claude Code installs from the marketplace, so the push in step 3 has to
+land and the tag exist first. Antigravity's installer copies a directory,
+including untracked files, so the checkout is put at the tag before the
+install and returned to main after; what it installs is then the release
+and not the working tree. `agy plugin install <plugin>@<marketplace>`
+after `agy plugin link` may allow a GitHub source directly; not yet
+confirmed against a live install.
 
 ## Done when
 
-- `git tag --contains <commit>` names the release, locally and on origin.
+- `git ls-remote --tags origin` lists `v<version>`, created by the
+  workflow within a minute of the push; `git fetch --tags` brings it down.
 - `agy plugin list` shows the plugin, and its copy of `plugin.json`
   carries the new version.
 - A fresh session in each harness runs `agent-bus whoami` and the

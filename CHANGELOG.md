@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `docs/ops/release.md`, the per-release runbook, and
+  `.github/workflows/tag-release.yml`, which tags `v<version>` from
+  `pyproject.toml` on a push to main and never moves an existing tag. The
+  design doc, roadmap, and cutover runbook are synced to 0.5.6.
+
 ## 0.5.6
 
 - `agent-bus messages`, the sibling of `ledger`: every message across

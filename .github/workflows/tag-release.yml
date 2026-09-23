@@ -1,0 +1,37 @@
+# Tags v<version> on main whenever a push changes pyproject.toml and that
+# version has no tag yet. The review happens before the push
+# (docs/ops/release.md); this only names what was pushed, so the deploy
+# script and the plugin marketplaces have a fixed commit to install from.
+# It never moves an existing tag.
+name: Tag release
+
+on:
+  push:
+    branches: [main]
+    paths: [pyproject.toml]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag the version in pyproject.toml if it has no tag
+        run: |
+          set -eu
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)
+          test -n "$version"
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists; not moved"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "agent-bus $version"
+          git push origin "$tag"
+          echo "tagged $tag at $(git rev-parse --short HEAD)"
