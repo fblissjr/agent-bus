@@ -17,4 +17,15 @@ internal/
 .antigravity/
 .agents/
 .codex/
-.cursor/
+/data/*
+!/data/.gitkeep
+
+# Safety net: SQLite + observability log files should never land in git
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.duckdb
+*.duckdb.wal
