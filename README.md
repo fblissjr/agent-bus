@@ -78,7 +78,7 @@ twice.
 ### Antigravity
 
 ```
-agy plugin install <path-to-clone>
+agy plugin install https://github.com/fblissjr/agent-bus
 agy mcp add --header "Authorization: Bearer $(cat "$AGENTS/tokens/antigravity")" agent-bus http://127.0.0.1:8765/mcp
 ```
 

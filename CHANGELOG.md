@@ -1,11 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.5.7
 
+- The skill: a request with several asks gets an answer per ask, done,
+  not done, or `BLOCKED`, so a thread never leaves a reader guessing which
+  parts are open. From the first live review on the simulator, where one
+  of three asks was answered and the other two went unmentioned.
 - `docs/ops/release.md`, the per-release runbook, and
   `.github/workflows/tag-release.yml`, which tags `v<version>` from
-  `pyproject.toml` on a push to main and never moves an existing tag. The
-  design doc, roadmap, and cutover runbook are synced to 0.5.6.
+  `pyproject.toml` on a push to main and never moves an existing tag.
+- Antigravity installs the plugin from GitHub
+  (`agy plugin install https://github.com/fblissjr/agent-bus`): a clean
+  clone with no untracked files, confirmed against a live install. README,
+  the cutover runbook, and the release runbook say so.
+- The design doc, roadmap, and cutover runbook are synced.
 
 ## 0.5.6
 

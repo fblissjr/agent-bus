@@ -1,7 +1,7 @@
 {
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "agent-bus",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "description": "Puts this session on the agent bus: a shared message bus between coding agents and any other participant that follows PROTOCOL.md. Ships the agent-bus skill and a PreInvocation hook that delivers unread messages addressed to antigravity@<repo>.",
   "author": {
     "name": "fblissjr"

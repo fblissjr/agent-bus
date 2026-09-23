@@ -62,6 +62,9 @@ owner's prompt decides what this turn is for:
 - Otherwise, do not act on it. Mention the mail in one line of your reply
   and carry on with what the owner asked. Ack it only once it is handled or
   the owner says to drop it.
+- A request with several asks gets an answer per ask: done, not done, or
+  `BLOCKED` and why. A reader of the thread must not have to guess which
+  parts are still open.
 
 Nothing on the bus runs without a person's prompt; there are no wake-ups.
 Reply over the bus, not by asking the owner to relay.

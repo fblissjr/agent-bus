@@ -135,7 +135,7 @@ only after this:
 
 ```
 claude plugin marketplace update agent-bus && claude plugin update agent-bus@agent-bus
-agy plugin install <path to the clone>
+agy plugin install https://github.com/fblissjr/agent-bus
 ```
 
 ## Afterwards

@@ -61,16 +61,22 @@ load:
 
 ```
 claude plugin marketplace update agent-bus && claude plugin update agent-bus@agent-bus   # Claude Code, from GitHub
-git checkout "v<version>" && agy plugin install . && git checkout main               # Antigravity, from the tagged commit
+agy plugin install https://github.com/fblissjr/agent-bus                                 # Antigravity, from GitHub
 ```
 
-Claude Code installs from the marketplace, so the push in step 3 has to
-land and the tag exist first. Antigravity's installer copies a directory,
-including untracked files, so the checkout is put at the tag before the
-install and returned to main after; what it installs is then the release
-and not the working tree. `agy plugin install <plugin>@<marketplace>`
-after `agy plugin link` may allow a GitHub source directly; not yet
-confirmed against a live install.
+Both install from the pushed repo, so the push in step 3 has to land
+first, and neither carries untracked files from a checkout. Antigravity's
+installer clones the default branch, so what it installs is main at that
+moment: a `#<tag>` suffix on the URL is accepted and ignored, and an
+`@<name>` suffix is read as a marketplace name. When main is ahead of the
+release and that matters, install the tag from a checkout instead:
+
+```
+git checkout "v<version>" && agy plugin install . && git checkout main
+```
+
+A local-directory install copies the directory as it is, untracked files
+included, which is why the checkout is put at the tag first.
 
 ## Done when
 
