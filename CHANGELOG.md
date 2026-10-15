@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.11
+
+- The reported session behind a seat obeys the address grammar, since the
+  store echoes it into the refused session's hook notice.
+
 ## 0.5.10
 
 - A linked worktree is in its main checkout's repo. `detect_repo` names the
@@ -22,8 +27,6 @@
 - A hook reports the session's cwd from its stdin. Antigravity runs plugin
   hooks from the plugin's directory, so the ledger recorded that.
 - The build backend range admits uv 0.13, which `uv lock` warned about.
-- The reported session behind a seat obeys the address grammar, since the
-  store echoes it into the refused session's hook notice.
 
 ## 0.5.9
 
