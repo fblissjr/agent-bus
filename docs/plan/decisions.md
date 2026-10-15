@@ -1,4 +1,4 @@
-last updated: 2026-09-22
+last updated: 2026-10-15
 
 # Open decisions
 
@@ -183,6 +183,11 @@ concurrent sessions both act on the same request.
 inboxes for broadcasts. The ledger records which instance acked, so nothing
 is lost either way. Antigravity accepted this in review.
 
+Since 0.5.10 a repo with several named seats keeps this scope: a seat label
+(`AGENT_BUS_INSTANCE`) gives each seat an address of its own for direct
+mail, held by one session at a time, while broadcasts still settle per
+harness and repo.
+
 ## 7. Explicit thread membership
 
 **Status: decided (a); designed, not scheduled; the design is `docs/design/groups.md`.**
@@ -244,7 +249,9 @@ manifests, `marketplace.json`, and `CHANGELOG.md`, and installed plugins
 only update when the version changes.
 
 **Recommendation: Gemini pushes after each agreed change and tags releases
-as `v<version>`.** It matches what has happened, keeps one hand on the
+as `v<version>`.** Since 0.5.7 the tag is made by
+`.github/workflows/tag-release.yml` on the push; the runbook is
+`docs/ops/release.md`. It matches what has happened, keeps one hand on the
 remote, and a tag gives the copied install in decision 2 something to
 install. Whoever pushes should not be the author of the change in the same
 range; that review discipline caught two bugs on the first day.

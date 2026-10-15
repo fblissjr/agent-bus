@@ -1,4 +1,4 @@
-last updated: 2026-09-23
+last updated: 2026-10-15
 
 # Roadmap
 
@@ -42,10 +42,33 @@ per-ask rule in the skill; 0.5.8 the Antigravity hook trailer; 0.5.9 the
 observe-first rule, the ceiling on answers, the CLI block in the skill,
 and `rules/AGENTS.md` as an always-on Antigravity rule. Each of the last
 three came from a behaviour seen in a live trace on the simulator the
-same day.
+same day. 0.5.10 made a linked worktree name its main checkout's repo,
+made a seat label (`AGENT_BUS_INSTANCE`) reach the hooks, held each seat
+for one session, and gave an Antigravity session one instance for its
+hook and its commands; 0.5.11 put the reported seat session through the
+address grammar. These came from evaluating the bus as the replacement for
+a file mailbox between several Claude seats and one Antigravity reviewer
+in another repo.
 
 The mechanism is `docs/design/system.md`; the host step is the runbook
 below, still the owner's to run.
+
+## 0.5.x, before that repo's trial
+
+Agreed with the owner on 2026-10-15; the trial starts at the beginning of
+a day, not mid-run.
+
+- Claude mid-turn delivery: a `PostToolUse` hook, each message shown once
+  per session, matching Antigravity's `PreInvocation`. Mail does not reach
+  either harness while it is idle, by the owner's ruling.
+- The CLI from any workspace: the skill, `rules/AGENTS.md`, and the hook
+  texts name a command that works outside this checkout.
+- Media paths outside any repo (`/mnt/...` video handed to a reviewer):
+  a protocol proposal for both agents and the owner; `files` is
+  repo-relative only.
+- The owner's choice for the trial: the simulator, with every harness
+  launched with `AGENT_BUS_SIM_DIR`, or the cutover below, after the port
+  is free.
 
 ## Host cutover, a runbook the owner runs once
 
@@ -136,8 +159,8 @@ anywhere.
 - Plugin content change means the version cascade (`pyproject.toml`, both
   manifests, `marketplace.json`, `CHANGELOG.md`) and every client updating
   its plugin.
-- Gemini pushes and tags `v<version>` after each agreed release; the pusher
-  is not the author of the range.
+- Gemini pushes after each agreed release and the workflow tags
+  `v<version>`; the pusher is not the author of the range.
 - One agent per checkout at a time; announce on the bus which file you are
   editing before editing it.
 - `PROTOCOL.md` and `docs/design/system.md` change in the same commit as

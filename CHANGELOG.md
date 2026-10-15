@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.12
+
+- The skill and `rules/AGENTS.md` name a CLI command that works outside
+  this checkout, the plugin's own `cli.py` under `uv run --no-project`;
+  `uv run agent-bus` fails in any other workspace.
+- Docs brought up to date with 0.5.11 and the host as it is: the README
+  covers named seats and worktrees, the CLI outside this checkout, and a
+  simulator reset that archives under `internal/` and keeps the tracked
+  `data/.gitkeep`; `AGENTS.md` says the simulator is the bus here until the
+  cutover and that the workflow tags releases; the cutover runbook checks
+  that nothing else holds the port; the roadmap records 0.5.10, 0.5.11 and
+  what is left before another repo's trial; the decisions record seat
+  labels under receipt scope and the tag workflow.
+
 ## 0.5.11
 
 - The reported session behind a seat obeys the address grammar, since the

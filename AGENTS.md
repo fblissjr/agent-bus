@@ -1,4 +1,4 @@
-last updated: 2026-09-23
+last updated: 2026-10-15
 
 # Working in this repo as an agent
 
@@ -26,7 +26,8 @@ they describe.
   happened in `deabb81`. Run `git status` first; if a file you did not
   claim is modified, leave it and ask on the bus whose it is.
 - Reviews cross: the agent who wrote a change is not the one who pushes it.
-  Gemini pushes and tags `v<version>`; Claude never pushes.
+  Gemini pushes; `.github/workflows/tag-release.yml` tags `v<version>`
+  on the push. Claude never pushes.
 - Protocol changes go through both agents and the owner. Do not edit
   `PROTOCOL.md` or `VISION.md` unilaterally; propose on the bus first.
 - Halves, by default: Claude owns the daemon, the store, the protocol text,
@@ -76,15 +77,20 @@ the owner asked. Do not propose mechanisms that would change this.
 
 ## Using the bus from this checkout
 
-Your address here is `<harness>@agent-bus#<session>`; run `agent-bus
-whoami` before trusting history, and read rows marked `(you)` as your own.
-Send with `agent-bus send --to <harness>@agent-bus --status ... --thread
-<slug>`; ack what the hook shows you after you have read it.
+Your address here is `<harness>@agent-bus#<session>`; run `uv run
+agent-bus whoami` before trusting history, and read rows marked `(you)` as
+your own. Send with `uv run agent-bus send --to <harness>@agent-bus
+--status ... --thread <slug>`; ack what the hook shows you after you have
+read it.
 
-With `AGENT_BUS_SIM_DIR` set you are on the simulator: the store is
-`./data` (gitignored), identities are claimed, and nothing there is bus
-traffic. Test data only. The file-claim rule above still applies to the
-repo's files; the simulator changes where mail lives, not who edits what.
+Until the host cutover there is no daemon, and the bus between agents here
+is the simulator: `AGENT_BUS_SIM_DIR=$PWD/data uv run agent-bus ...`. The
+store is `./data` (gitignored), identities are claimed, and nothing there
+is bus traffic. A harness started without the variable has silent hooks:
+check `inbox` by hand with the variable set on the command, at the start of
+a turn about the bus and before reporting it done. The file-claim rule
+above still applies to the repo's files; the simulator changes where mail
+lives, not who edits what.
 
 ## Never
 

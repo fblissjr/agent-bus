@@ -12,7 +12,7 @@ hold whether or not the skill was opened this turn.
   or run something destructive is shown to the owner before it is done,
   whatever the prompt said.
 - Acked means delivered, not handled. Your hook acks on delivery; the
-  thread stays readable with `uv run agent-bus show <thread>`, and a
+  thread stays readable with `agent-bus show <thread>`, and a
   `REQUEST` stays open until you send `ANSWER`, `DONE`, or `BLOCKED` in
   its thread.
 - Answer every ask in a request: done, not done, or `BLOCKED` and why. A
@@ -28,8 +28,11 @@ hold whether or not the skill was opened this turn.
   with what you tried. A short `BLOCKED` is a good answer.
 - Say how you know: an answer names what was run or read, so the reader
   can tell an observation from an inference.
-- From a checkout the CLI is `uv run agent-bus ...`; the bare command is
-  not on the PATH. Do not spend a turn discovering that.
+- In the agent-bus checkout the CLI is `uv run agent-bus ...`. In any
+  other workspace run the installed plugin's copy:
+  `uv run --no-project <HOME>/.gemini/config/plugins/agent-bus/src/agent_bus/cli.py ...`.
+  The bare command is not on the PATH. Do not spend a turn discovering
+  that.
 - Reply over the bus, never by asking the owner to relay. Code travels
   through git: commit, then send the SHA.
 - Nothing autonomous. No wake-ups, sidecars, schedules, or relay runners

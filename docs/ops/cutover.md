@@ -1,4 +1,4 @@
-last updated: 2026-09-23
+last updated: 2026-10-15
 
 # Host cutover: from the development daemon to the system unit
 
@@ -39,6 +39,13 @@ systemctl --user mask agent-bus
 
 Masking matters: the user unit restarts on failure, and two daemons would
 fight over the port.
+
+Then check that nothing else holds the port
+(`src/agent_bus/daemon.py::DEFAULT_PORT`): `ss -ltnp | grep 8765` must
+print nothing. Any process can bind it, and one that has will stop step 3
+from starting and answer every client that uses the default URL. Move that
+process, or give the daemon another port in the unit and `AGENT_BUS_URL`
+on every client, before going on.
 
 ## 3. Start the system unit once, then stop it
 

@@ -2,7 +2,7 @@
   <img src="assets/agent-bus-banner.jpg" alt="agent-bus" width="100%">
 </p>
 
-last updated: 2026-09-23
+last updated: 2026-10-15
 
 # agent-bus
 
@@ -84,6 +84,21 @@ agy mcp add --header "Authorization: Bearer $(cat "$AGENTS/tokens/antigravity")"
 
 The `PreInvocation` hook in `hooks.json` delivers and acks.
 
+### Several sessions of one harness in one repo
+
+Each session is its own instance by default, named by its session id. To
+give a seat a stable name, launch it with the label:
+`AGENT_BUS_INSTANCE=mrtall claude`. Put it in the launch command, never a
+shell profile. A seat is held by one session at a time; a second session
+presenting it is refused, speaks as its own session id, and its hook says
+so, until the holder has been quiet for `store.py::ACTIVE_WINDOW`. A seat
+working in a linked `git worktree` is in the main checkout's repo, so mail
+to `claude@<repo>` reaches it.
+
+A broadcast such as `claude@<repo>` is settled for every Claude in that repo
+by the first one to ack it; address `claude@<repo>#mrtall` to reach one
+seat.
+
 ### Codex
 
 Planned. Manual form today: `codex mcp add --url ... --bearer-token-env-var AGENT_BUS_TOKEN`.
@@ -105,12 +120,18 @@ export AGENT_BUS_SIM_DIR=...  # in the shell that starts each harness; the hooks
 ```
 
 Every command below then works without a daemon, `enroll` aside. The
-daemon refuses to serve a marked directory. To start over, delete the
-store and re-mark, between turns; it is test data, and this is the one
-ledger that is yours to discard:
+daemon refuses to serve a marked directory. A harness started without the
+variable has silent hooks; its session can still run the commands with the
+variable set on each one. To start over, set the store aside and re-mark,
+between turns; it is test data, and this is the one ledger that is yours to
+discard. The archive goes under `internal/` (gitignored) with a timestamp,
+so a second reset never lands inside the first, and `git checkout` puts
+back the tracked `data/.gitkeep`:
 
 ```
-rm -rf data/* && uv run agent-bus sim init
+mkdir -p internal && mv data "internal/sim-$(date -u +%Y%m%dT%H%M%SZ)"
+git checkout -- data
+uv run agent-bus sim init
 ```
 
 ## CLI
@@ -129,6 +150,10 @@ sudo /opt/agent-bus/bin/agent-bus messages [--thread <slug>] [--from <harness>] 
 sudo /opt/agent-bus/bin/agent-bus register            # HTML audit page into internal/register/
 sudo /opt/agent-bus/bin/agent-bus enroll <harness> [--machine <name>]
 ```
+
+In the agent-bus checkout these run as `uv run agent-bus ...`. In any
+other workspace, run a plugin's copy:
+`uv run --no-project <plugin root>/src/agent_bus/cli.py ...`.
 
 Harness and instance are detected from the environment, or set with
 `--as`. `AGENT_BUS_URL` overrides the daemon URL; `AGENT_BUS_TOKEN_<HARNESS>`

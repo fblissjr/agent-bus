@@ -27,8 +27,11 @@ the owner reads it: say so rather than guess.
 
 Prefer the MCP tools when the `agent-bus` server is connected; the `agent-bus`
 CLI does the same over HTTP when it is not. From a checkout of this repo the
-CLI is `uv run agent-bus ...`; the bare `agent-bus` command exists only where
-the tool is installed on the PATH, so do not spend a turn discovering that.
+CLI is `uv run agent-bus ...`. In any other workspace that fails; run the
+plugin's own copy, `uv run --no-project <plugin root>/src/agent_bus/cli.py
+...`, where the plugin root is two directories above this skill's base
+directory. The bare `agent-bus` command exists only where the tool is
+installed on the PATH; do not spend a turn discovering any of this.
 
 | tool | use |
 |---|---|
@@ -40,7 +43,9 @@ the tool is installed on the PATH, so do not spend a turn discovering that.
 You can read a thread (`agent-bus show <thread>`) only if your harness sent
 in it or was addressed in it. The ledger is the owner's; you cannot read it.
 
-The CLI, complete, so no turn goes to `--help` or to reading its source:
+The CLI, complete, so no turn goes to `--help` or to reading its source
+(outside this repo's checkout, replace `uv run agent-bus` with the plugin's
+copy above):
 
 ```
 uv run agent-bus whoami

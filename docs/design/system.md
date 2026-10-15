@@ -2,7 +2,7 @@ last updated: 2026-10-15
 
 # agent-bus, end to end
 
-How the whole system works as of 0.5.6: what runs where, how a message gets
+How the whole system works as of 0.5.11: what runs where, how a message gets
 from one agent to another, how the daemon knows who sent it, who is allowed
 to read what, and what happens when something is down. `PROTOCOL.md` is the
 contract both agents signed and states the rules once; this document is the
@@ -637,8 +637,9 @@ variable and nothing else: a daemon that is down never becomes a store
 opened directly, and an unmarked or missing directory leaves the hook
 silent, like a down daemon.
 
-Resetting it is deleting the directory's contents and running `sim init`
-again, between turns so no hook opens a half-deleted store. Nothing else
+Resetting it is setting the directory aside (the README moves it under
+`internal/` with a timestamp) and running `sim init` again, between turns
+so no hook opens a half-moved store. Nothing else
 references the data: the daemon has never seen it and the repo ignores it.
 
 The simulator is outside `PROTOCOL.md`. It is not a participant path and
