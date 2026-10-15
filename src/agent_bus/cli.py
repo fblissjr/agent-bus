@@ -18,6 +18,7 @@ environment or --as claims, and every ledger row says so. Test data only.
 import argparse
 import json
 import os
+import shlex
 import socket
 import sqlite3
 import subprocess
@@ -549,12 +550,22 @@ def hook_notice(c, me):
         return None
 
 
+def cli_command():
+    """The command a hook's reader runs to reach the bus: this file under uv, which needs
+    nothing installed and works from any workspace. `uv run agent-bus` works only in the
+    agent-bus checkout. On the simulator it carries the store, so it reaches the same one."""
+    command = f"uv run --no-project {shlex.quote(str(Path(__file__).resolve()))}"
+    if sim_dir():
+        command = f"AGENT_BUS_SIM_DIR={shlex.quote(str(sim_dir().resolve()))} {command}"
+    return command
+
+
 def acked_trailer(harness, threads):
     """What a reader that acks on delivery keeps losing: the mail is gone from its inbox but not
     handled, and a request is open until it is answered on the bus."""
     return (
         f"\n\nThese are now acked for {harness} in this repo and will not show again. Re-read a thread with"
-        f" `uv run agent-bus show <thread>` (threads: {', '.join(threads)}). A REQUEST stays open until you send"
+        f" `{cli_command()} show <thread>` (threads: {', '.join(threads)}). A REQUEST stays open until you send"
         " ANSWER, DONE, or BLOCKED in its thread; if this turn is not about the bus, say in one line that it is pending."
     )
 
@@ -595,7 +606,7 @@ def cmd_hook(args):
             lines.append(c.seat_notice)
         if found:
             ids = " ".join(str(i) for i in found[1])
-            lines.append(f"{found[0]}\n\nAck after reading: agent-bus ack {ids} --me {me}")
+            lines.append(f"{found[0]}\n\nAck after reading: {cli_command()} ack {ids} --me {me}")
         if lines:
             print("\n".join(lines))
     else:

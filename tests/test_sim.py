@@ -5,6 +5,7 @@ chain, and that a daemon that is down never turns into a store opened directly."
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -137,10 +138,31 @@ def test_claude_hook_delivers_from_the_simulator_and_leaves_the_ack(sim):
     out = r.stdout.decode()
     assert out.startswith("[agent-bus] you are claude@repo#a6419e08")
     assert "You have 1 new message" in out and "## 1 | antigravity@repo#b2d1b325 -> claude@repo" in out
-    assert "Ack after reading: agent-bus ack 1 --me claude@repo#a6419e08" in out
+    assert f"Ack after reading: AGENT_BUS_SIM_DIR={data.resolve()} uv run --no-project {CLI.resolve()} ack 1 --me claude@repo#a6419e08" in out
     # Not acked: it re-shows on the next prompt until the reader acks.
     assert "You have 1 new message" in run(["hook", "--agent", "claude"], data, repo, stdin=stdin).stdout.decode()
     assert run(["ack", "1"], data, repo, "claude", "a6419e08").returncode == 0
+    assert run(["hook", "--agent", "claude"], data, repo, stdin=stdin).stdout == b""
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="the printed command runs under uv")
+def test_the_printed_ack_command_works_from_another_workspace(sim, tmp_path):
+    """The reader runs exactly what the hook printed, from a checkout that is not agent-bus
+    and with no simulator variable of its own, and the mail is acked."""
+    data, repo = sim
+    send(sim, "antigravity", "b2d1b325", "claude@repo", "ack me from elsewhere")
+    stdin = json.dumps(dict(CLAUDE_PROMPT, cwd=str(repo))).encode()
+    out = run(["hook", "--agent", "claude"], data, repo, stdin=stdin).stdout.decode()
+    command = out.split("Ack after reading: ", 1)[1].strip()
+    elsewhere = tmp_path / "other-checkout"
+    elsewhere.mkdir()
+    env = {k: v for k, v in os.environ.items() if not (k.startswith("AGENT_BUS_") or k.startswith("CLAUDE_") or k == "VIRTUAL_ENV")}
+    # Another workspace has none of this project's environment: drop its venv from PATH, where pytest put `agent-bus`.
+    venv = Path(sys.prefix).resolve()
+    env["PATH"] = os.pathsep.join(d for d in env.get("PATH", "").split(os.pathsep) if d and not Path(d).resolve().is_relative_to(venv))
+    env["AGENT_BUS_HARNESS"] = "claude"
+    r = subprocess.run(command, shell=True, cwd=elsewhere, env=env, capture_output=True, timeout=60)
+    assert r.returncode == 0, r.stderr
     assert run(["hook", "--agent", "claude"], data, repo, stdin=stdin).stdout == b""
 
 

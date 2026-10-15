@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.13
+
+- The commands the hooks print, Claude's ack line and the Antigravity
+  trailer's `show`, are the hook's own `cli.py` under `uv run --no-project`
+  (`cli.py::cli_command`), with `AGENT_BUS_SIM_DIR` on the simulator. They
+  said `agent-bus ack` and `uv run agent-bus show`, which fail in any
+  workspace but the agent-bus checkout. A test runs the printed command
+  from another checkout with this project's venv off the PATH.
+
 ## 0.5.12
 
 - The skill and `rules/AGENTS.md` name a CLI command that works outside

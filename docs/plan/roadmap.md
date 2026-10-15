@@ -46,7 +46,9 @@ same day. 0.5.10 made a linked worktree name its main checkout's repo,
 made a seat label (`AGENT_BUS_INSTANCE`) reach the hooks, held each seat
 for one session, and gave an Antigravity session one instance for its
 hook and its commands; 0.5.11 put the reported seat session through the
-address grammar. These came from evaluating the bus as the replacement for
+address grammar; 0.5.12 and 0.5.13 made the skill, `rules/AGENTS.md`, and
+the commands the hooks print work from any workspace, not only this
+checkout. These came from evaluating the bus as the replacement for
 a file mailbox between several Claude seats and one Antigravity reviewer
 in another repo.
 
@@ -61,8 +63,6 @@ a day, not mid-run.
 - Claude mid-turn delivery: a `PostToolUse` hook, each message shown once
   per session, matching Antigravity's `PreInvocation`. Mail does not reach
   either harness while it is idle, by the owner's ruling.
-- The CLI from any workspace: the skill, `rules/AGENTS.md`, and the hook
-  texts name a command that works outside this checkout.
 - Media paths outside any repo (`/mnt/...` video handed to a reviewer):
   a protocol proposal for both agents and the owner; `files` is
   repo-relative only.

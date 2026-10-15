@@ -365,6 +365,12 @@ Claude hook prints and does not ack; the notice ends with the exact
 re-shows on every prompt until it does. A duplicate is recoverable; a loss
 is not. `PROTOCOL.md` records the rule per harness.
 
+Every command a hook prints is `cli.py::cli_command`: the hook's own
+`cli.py` under `uv run --no-project`, prefixed with `AGENT_BUS_SIM_DIR` on
+the simulator. A hook fires in whatever workspace its session is in, and
+`uv run agent-bus` works only in the agent-bus checkout, so the reader can
+run what it was shown from anywhere.
+
 Acking on delivery has a cost the simulator made visible: a request that
 arrives during an unrelated Antigravity turn drops out of its inbox after
 one showing, and the model treated acked as handled three times in one

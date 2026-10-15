@@ -30,7 +30,8 @@ CLI does the same over HTTP when it is not. From a checkout of this repo the
 CLI is `uv run agent-bus ...`. In any other workspace that fails; run the
 plugin's own copy, `uv run --no-project <plugin root>/src/agent_bus/cli.py
 ...`, where the plugin root is two directories above this skill's base
-directory. The bare `agent-bus` command exists only where the tool is
+directory. The hook's notice prints the exact command for your workspace;
+copy it. The bare `agent-bus` command exists only where the tool is
 installed on the PATH; do not spend a turn discovering any of this.
 
 | tool | use |

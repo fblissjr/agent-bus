@@ -99,7 +99,8 @@ def test_speaks_with_mail_and_leaves_the_ack_to_the_reader(stub):
     out = r.stdout.decode()
     assert re.match(r"\[agent-bus\] You have 1 new message", out)
     assert "## 7 | antigravity@repo#b2d1b325 -> claude@repo" in out and "Please look at x." in out
-    assert "Ack after reading: agent-bus ack 7 --me claude@repo#a6419e08" in out
+    # The command names this CLI file, so it runs from any workspace, not only the agent-bus checkout.
+    assert f"Ack after reading: uv run --no-project {CLI.resolve()} ack 7 --me claude@repo#a6419e08" in out
     assert stub.acks == []
 
 
@@ -131,7 +132,7 @@ def test_a_seat_label_beats_the_session_id(stub):
     r = run_hook("claude", stub.url, stdin=CLAUDE_START, env_extra={"AGENT_BUS_INSTANCE": "mrtall"})
     out = r.stdout.decode()
     assert out.startswith("[agent-bus] you are claude@repo#mrtall")
-    assert "agent-bus ack 7 --me claude@repo#mrtall" in out
+    assert "ack 7 --me claude@repo#mrtall" in out
     assert stub.headers[0]["X-Bus-Instance"] == "mrtall"
 
 
@@ -186,7 +187,7 @@ def test_antigravity_acks_on_delivery_with_its_conversation_id(stub):
     notice = payload["injectSteps"][0]["ephemeralMessage"]
     assert notice.startswith("[agent-bus] You have 1 new message")
     # Acked on delivery, so the notice says so and tells the reader what that does and does not settle.
-    assert "now acked for antigravity" in notice and "agent-bus show <thread>" in notice and "(threads: t)" in notice
+    assert "now acked for antigravity" in notice and f"uv run --no-project {CLI.resolve()} show <thread>" in notice and "(threads: t)" in notice
     assert "A REQUEST stays open until" in notice
     assert stub.acks == [{"me": "antigravity@some-repo#b2d1b325", "ids": [7]}]
 
