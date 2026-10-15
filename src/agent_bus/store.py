@@ -332,7 +332,10 @@ class Store:
     def hold_seat(self, identity, address):
         """Refuse a seat label another session holds; otherwise take or refresh it. Two
         sessions in one seat would read and ack each other's mail, which is what an
-        accidentally exported AGENT_BUS_INSTANCE would otherwise do."""
+        accidentally exported AGENT_BUS_INSTANCE would otherwise do. The session is reported
+        and is echoed into another session's hook notice, so it obeys the address grammar
+        like every other reported component that reaches a reader."""
+        check_slug("session", identity.session)
         row = self.db.execute("SELECT session, ts FROM seats WHERE address = ?", (address,)).fetchone()
         cutoff = (datetime.now(timezone.utc) - ACTIVE_WINDOW).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         if row and row[0] != identity.session and row[1] >= cutoff:
