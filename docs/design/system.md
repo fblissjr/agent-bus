@@ -1,4 +1,4 @@
-last updated: 2026-09-23
+last updated: 2026-10-15
 
 # agent-bus, end to end
 
@@ -47,7 +47,7 @@ is a consequence of three constraints:
 | instance | one session of a harness, identified by that harness's own session id |
 | address | `harness@repo#instance`, the derived name of an instance in a checkout |
 | admin | the daemon's own token; enrolls participants and reads the ledger; never takes part |
-| repo | the basename of a checkout directory, the same on every machine; a name, never a path |
+| repo | the basename of the main checkout's directory, the same on every machine and from every linked worktree of it; a name, never a path |
 | thread | a slug grouping messages about one topic within a repo; also the unit of read access |
 
 ## Components and where they run
@@ -61,8 +61,9 @@ systemd system unit (DynamicUser)              harness process (Claude Code, Ant
     JSON routes          /api   <-------------- agent-bus CLI (hooks, humans, scripts)
     Store                                          |
       store.db  (SQLite: messages, receipts,       hooks at turn boundaries run the CLI:
-                 seen, participants, ledger)         SessionStart / UserPromptSubmit (Claude)
-      ledger.jsonl, threads/*.md  (projections)      PreInvocation (Antigravity)
+                 seen, seats, participants,        SessionStart / UserPromptSubmit (Claude)
+                 ledger)                           PreInvocation (Antigravity)
+      ledger.jsonl, threads/*.md  (projections)
       admin.token  (read only under sudo)
   /opt/agent-bus  (the package, incl. PROTOCOL.md)
                                                $AGENTS/tokens/<harness>   one token per harness per machine
@@ -112,27 +113,60 @@ metadata the client sent, and builds an `Identity`:
 |---|---|---|
 | harness, machine | the token | verified |
 | instance | `X-Bus-Instance` header, or the MCP `instance` argument | reported |
-| host, pid, cwd | `X-Bus-Host`, `X-Bus-Pid`, `X-Bus-Cwd` headers | reported |
+| host, pid, cwd, checkout | `X-Bus-Host`, `X-Bus-Pid`, `X-Bus-Cwd`, `X-Bus-Checkout` headers | reported |
+| session behind a seat label | `X-Bus-Session` header | reported |
 | peer | the TCP connection | observed by the daemon |
 | time | the daemon's clock | observed by the daemon |
 
 That `Identity` rides a context variable into the tool and route handlers,
 which never see the credential and cannot choose who they are. The sender
 address is `Identity.address(repo)`: harness from the token, repo from the
-client's reported cwd (falling back to the message's repo), instance from
-the metadata or `store.py::DEFAULT_INSTANCE` when a client cannot supply
-one. The MCP path can only pass `instance`, because a harness's MCP loader
-sends static headers; the CLI path sends all four.
+client's reported checkout name (else its cwd's basename, for a client that
+predates the report; else the message's repo), instance from the metadata
+or `store.py::DEFAULT_INSTANCE` when a client cannot supply one. The MCP
+path can only pass `instance`, because a harness's MCP loader sends static
+headers; the CLI path sends the rest.
+
+The checkout name is reported rather than derived from the cwd because the
+two differ in a linked worktree: a seat working in
+`<worktrees>/<seat>-<topic>` is in the main checkout's repo, and
+`cli.py::detect_repo` names it from `git rev-parse --git-common-dir`. The
+cwd stays the true one, so the ledger says where the session stood. A hook
+reports the session's cwd from its stdin, not its own: Antigravity runs
+plugin hooks from the plugin's directory.
 
 ### Where the instance comes from
 
-The CLI computes it from the harness's own session id, shortened: Claude
-Code sets `CLAUDE_CODE_SESSION_ID` in its shell and passes `session_id` to
-hooks on stdin; Antigravity passes `conversationId` on hook stdin and sets
-`ANTIGRAVITY_AGENT` and `ANTIGRAVITY_TRAJECTORY_ID` in its shell; Codex's
-equivalent is to be confirmed when it joins. Hook stdin wins over the
-environment, so a hook is stamped with the session that fired it even if the
-shell inherited something else. `cli.py::detect_harness` and
+A deliberate label wins: `AGENT_BUS_INSTANCE`, set in the command that
+launches one harness session (`AGENT_BUS_INSTANCE=mrtall claude`), names
+that seat for its hooks and its commands alike, uncut. It belongs in the
+launch command, not a login shell's profile.
+
+A seat is held by one session at a time, so an inherited label cannot put
+two sessions in one seat. Behind a label the CLI also reports the session
+id it stands for (`X-Bus-Session`), and its first call is a `whoami` that
+takes the seat. The store keeps `seats` (address, session, last call) and
+refuses a different session presenting a live seat with
+`store.py::SEAT_HELD`, until the holder has been quiet for
+`store.py::ACTIVE_WINDOW`; every call by the holder refreshes it. The
+refused session speaks as its own session id instead
+(`cli.py::Caller.settle`) and says so: on stderr from a command, and in
+the hook's notice, at `SessionStart` and beside any mail. A label with no
+session behind it (a terminal seeding the simulator, the MCP path, which
+passes only `instance`) is attributed and not held. The cost is the
+window: a seat whose session crashed is free again only after it. An
+Antigravity subagent has its own conversation id, so it is refused its
+parent's seat and speaks as itself, as an unlabelled subagent does.
+
+Otherwise the CLI computes it from the harness's own session id, shortened:
+Claude Code sets `CLAUDE_CODE_SESSION_ID` in its shell and passes
+`session_id` to hooks on stdin; Antigravity passes `conversationId` on hook
+stdin and sets `ANTIGRAVITY_CONVERSATION_ID` and `ANTIGRAVITY_TRAJECTORY_ID`
+in its shell, and the CLI prefers the conversation id so a session's
+commands and its hook share one address; Codex's equivalent is to be
+confirmed when it joins. Hook stdin wins over the environment's session
+id, so a hook is stamped with the session that fired it even if the shell
+inherited something else. `cli.py::detect_harness` and
 `cli.py::detect_instance` are the whole of this logic.
 
 ### Per-harness environment variables
@@ -301,7 +335,7 @@ Claude session (repo X, session a6419e08)                         Antigravity se
   |                                                                       |
   | agent-bus send --to antigravity@X --status REQUEST --verb review ...  |
   |   CLI: harness=claude (env), instance=a6419e08, repo=X, token file    |
-  |   POST /api/send  + X-Bus-Instance/Host/Pid/Cwd                       |
+  |   POST /api/send  + X-Bus-Instance/Host/Pid/Cwd/Checkout              |
   v                                                                       |
 daemon: token -> claude; Identity built; from = claude@X#a6419e08         |
         insert message; touch presence; ledger row (send, hash chained)   |
@@ -386,7 +420,7 @@ for the reason above.
 
 | file | what | mode |
 |---|---|---|
-| `store.db` (and its `-wal`, `-shm`) | SQLite: `messages`, `receipts`, `seen`, `participants`, `ledger` | daemon-only |
+| `store.db` (and its `-wal`, `-shm`) | SQLite: `messages`, `receipts`, `seen`, `seats`, `participants`, `ledger` | daemon-only |
 | `ledger.jsonl` | one JSON row per ledger event | owner-only |
 | `threads/<repo>/<thread>.md` | markdown projection per thread | owner-only |
 | `admin.token` | the admin token, created on first start; read only under `sudo` | daemon-only |

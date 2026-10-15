@@ -172,6 +172,7 @@ tr.hidden { display: none; }
     <div><h3>ledger <span class="meta">(hash-chained; every enroll, send, and ack since 0.4)</span></h3><div id="t-ledger"></div></div>
     <div><h3>participants <span class="meta">(token hashes omitted)</span></h3><div id="t-participants"></div></div>
     <div><h3>seen <span class="meta">(presence: last activity per address)</span></h3><div id="t-seen"></div></div>
+    <div><h3>seats <span class="meta">(which session holds each seat label)</span></h3><div id="t-seats"></div></div>
     <div><h3>messages, as rows</h3><div id="t-messages"></div></div>
   </section>
 
@@ -350,6 +351,7 @@ files: &lt;path&gt;, &lt;path&gt;
     messages: { id: "row id, also the message number", ts: "daemon clock, UTC", sender: "derived address (0.4+) or claimed name (earlier)", harness: "verified harness of the sender (0.4+; backfilled for older rows)", recipient: "the to address as written", to_agent: "parsed from recipient", to_repo: "parsed; null means any repo", to_instance: "parsed; null means any instance", repo: "the repo the message is about", thread: "slug; the unit of read access", status: "REQUEST, ANSWER, DONE, BLOCKED, FYI", verb: "review, implement, test, answer", sha: "commit the message is about", files: "repo-relative paths, JSON list", body: "free text" },
     receipts: { message_id: "the message", reader: "receipt scope: harness@repo", ts: "when acked" },
     seen: { address: "an instance address", harness: "its harness", host: "as reported", ts: "last activity" },
+    seats: { address: "a labelled instance address", session: "the session holding it, as reported", ts: "the holder's last call" },
     participants: { name: "harness", machine: "the machine (0.5+)", ts: "enrolled or re-keyed", token_hash: "omitted here" },
     ledger: { seq: "row number, the chain order", ts: "daemon clock", event: "enroll, send, ack", harness: "verified", instance: "reported", host: "reported", pid: "reported", cwd: "reported", peer: "observed by the daemon", message_id: "for send and ack", body_hash: "sha256 of the body", prev_hash: "the previous row's hash", hash: "this row's hash", machine: "verified (0.5+)", subject: "who was enrolled, who was addressed, or the receipt scope (0.5+)", hash_version: "which field list this row hashes (0.5+)" },
   };
@@ -399,7 +401,8 @@ files: &lt;path&gt;, &lt;path&gt;
   $("#t-ledger").innerHTML = table(D.ledger.map((r) => Object.assign({}, r, { hash: r.hash.slice(0, 12) + "…", prev_hash: r.prev_hash.slice(0, 12) + "…", body_hash: r.body_hash ? r.body_hash.slice(0, 12) + "…" : "" })), colsOf("ledger"));
   $("#t-participants").innerHTML = table(D.participants, colsOf("participants"));
   $("#t-seen").innerHTML = table(D.seen, colsOf("seen"));
+  $("#t-seats").innerHTML = D.schema.seats ? table(D.seats, colsOf("seats")) : "";
   $("#t-messages").innerHTML = table(D.messages, colsOf("messages"), ["body"]);
-  ["#t-receipts", "#t-ledger", "#t-participants", "#t-seen", "#t-messages"].forEach((s) => enhance($(s)));
+  ["#t-receipts", "#t-ledger", "#t-participants", "#t-seen", "#t-seats", "#t-messages"].forEach((s) => enhance($(s)));
 })();
 </script>

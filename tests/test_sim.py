@@ -157,6 +157,50 @@ def test_antigravity_hook_acks_on_delivery(sim):
     assert json.loads(run(["ledger", "--json"], data, repo).stdout)["rows"][-1]["subject"] == "antigravity@repo"
 
 
+def test_a_linked_worktree_reads_its_main_checkouts_mail(sim, tmp_path):
+    """A seat working in <elsewhere>/<seat>-<topic> is still in repo `repo`: same address, same mail."""
+    data, repo = sim
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", str(repo)]
+    subprocess.run(git[:5] + ["init", "-q", str(repo)], check=True)
+    subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "init"], check=True)
+    wt = tmp_path / "worktrees" / "mrlol-topic"
+    subprocess.run(git + ["worktree", "add", "-q", "-b", "topic", str(wt)], check=True)
+    assert run(["whoami"], data, wt, "claude", "mrlol").stdout.decode().strip() == "claude@repo#mrlol"
+    send(sim, "antigravity", "b2d1b325", "claude@repo", "reaches the worktree")
+    stdin = json.dumps(dict(CLAUDE_PROMPT, cwd=str(wt))).encode()
+    assert "reaches the worktree" in run(["hook", "--agent", "claude"], data, wt, stdin=stdin).stdout.decode()
+
+
+def test_a_seat_label_is_held_by_one_session(sim):
+    """An AGENT_BUS_INSTANCE inherited by a second session must not put two sessions in one
+    seat: the second speaks as its own session id, says so, and never sees the seat's mail."""
+    data, repo = sim
+    a = {"CLAUDE_CODE_SESSION_ID": "aaaa1111-0000"}
+    b = {"CLAUDE_CODE_SESSION_ID": "bbbb2222-0000"}
+    assert run(["whoami"], data, repo, "claude", "mrtall", env_extra=a).stdout.decode().strip() == "claude@repo#mrtall"
+    r = run(["whoami"], data, repo, "claude", "mrtall", env_extra=b)
+    assert r.stdout.decode().strip() == "claude@repo#bbbb2222"
+    assert "seat held: claude@repo#mrtall is held by session aaaa1111" in r.stderr.decode()
+    send(sim, "antigravity", "b2d1b325", "claude@repo#mrtall", "for the seat")
+    start = lambda sid: json.dumps(dict(CLAUDE_START, session_id=sid, cwd=str(repo))).encode()
+    out_b = run(["hook", "--agent", "claude"], data, repo, stdin=start("bbbb2222-0000"), env_extra={"AGENT_BUS_INSTANCE": "mrtall"}).stdout.decode()
+    assert out_b.startswith("[agent-bus] you are claude@repo#bbbb2222")
+    assert "seat held:" in out_b and "for the seat" not in out_b
+    out_a = run(["hook", "--agent", "claude"], data, repo, stdin=start("aaaa1111-0000"), env_extra={"AGENT_BUS_INSTANCE": "mrtall"}).stdout.decode()
+    assert out_a.startswith("[agent-bus] you are claude@repo#mrtall") and "for the seat" in out_a and "seat held:" not in out_a
+    # Once the holder has been quiet for the window, the seat frees.
+    Store(data, sim=True).db.execute("UPDATE seats SET ts = '2000-01-01T00:00:00Z'")
+    assert run(["whoami"], data, repo, "claude", "mrtall", env_extra=b).stdout.decode().strip() == "claude@repo#mrtall"
+
+
+def test_antigravity_commands_and_hook_share_one_instance(sim):
+    """The hook is handed the conversation id; a command in the same session must pick the same one."""
+    data, repo = sim
+    env = {"ANTIGRAVITY_CONVERSATION_ID": "e33feb45-0000", "ANTIGRAVITY_TRAJECTORY_ID": "8e852f69-0000"}
+    out = run(["whoami"], data, repo, "antigravity", env_extra=env).stdout.decode().strip()
+    assert out == "antigravity@repo#e33feb45"
+
+
 def test_hook_is_silent_when_the_directory_is_not_a_simulator(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()

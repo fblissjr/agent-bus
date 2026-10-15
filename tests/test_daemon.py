@@ -87,6 +87,25 @@ def test_sender_is_derived_from_token_and_metadata(bus):
     assert (code, me["harness"], me["address"]) == (200, "claude", "claude@my-repo#a6419e08")
     code, msg2 = bus.call("POST", "/api/send", claude, {"to": "antigravity@r", "repo": "r", "status": "FYI", "body": "no metadata", "thread": "t"})
     assert msg2["from"] == "claude@r#default"
+    # A linked worktree reports its main checkout's name; it wins over the cwd's basename.
+    code, msg3 = bus.call("POST", "/api/send", claude, {"to": "antigravity@r", "repo": "r", "status": "FYI", "body": "from a worktree", "thread": "t"}, instance="a6419e08", cwd="/x/worktrees/mrlol-topic", checkout="my-repo")
+    assert (code, msg3["from"]) == (200, "claude@my-repo#a6419e08")
+    code, out = bus.call("POST", "/api/send", claude, {"to": "antigravity@r", "repo": "r", "status": "FYI", "body": "x", "thread": "t"}, checkout="no spaces")
+    assert code == 400 and "checkout name" in out["error"]
+
+
+def test_a_seat_label_is_held_by_one_session(bus):
+    claude = bus.enroll("claude")
+    body = {"to": "antigravity@r", "repo": "r", "status": "FYI", "body": "x", "thread": "t"}
+    assert bus.call("GET", "/api/whoami?repo=r", claude, instance="mrtall", session="aaaa1111", checkout="r")[0] == 200
+    code, out = bus.call("POST", "/api/send", claude, body, instance="mrtall", session="bbbb2222", checkout="r")
+    assert code == 400 and "seat held: claude@r#mrtall is held by session aaaa1111" in out["error"]
+    code, out = bus.call("GET", "/api/whoami?repo=r", claude, instance="mrtall", session="bbbb2222", checkout="r")
+    assert code == 400 and "seat held:" in out["error"]
+    code, msg = bus.call("POST", "/api/send", claude, body, instance="mrtall", session="aaaa1111", checkout="r")
+    assert (code, msg["from"]) == (200, "claude@r#mrtall")
+    # Without a session behind it (a terminal, the MCP path) a label is attributed, not held.
+    assert bus.call("POST", "/api/send", claude, body, instance="mrtall", checkout="r")[0] == 200
 
 
 def test_inbox_requires_own_harness_and_receipts_scope_per_harness_repo(bus):
@@ -220,7 +239,7 @@ def test_export_is_admin_only_and_never_carries_token_hashes(bus):
     assert bus.call("GET", "/api/export", claude)[0] == 400
     code, out = bus.call("GET", "/api/export", ADMIN)
     assert code == 200 and out["first_bad_seq"] is None
-    assert set(out["schema"]) == {"messages", "receipts", "seen", "participants", "ledger"}
+    assert set(out["schema"]) == {"messages", "receipts", "seen", "seats", "participants", "ledger"}
     assert out["messages"][0]["body"] == "exported" and out["messages"][0]["files"] == []
     assert out["participants"] and "token_hash" not in out["participants"][0]
     assert "token_hash" not in json.dumps(out)

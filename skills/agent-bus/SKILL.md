@@ -12,8 +12,11 @@ The bus carries small envelopes between participants. The rules are in
 ## Your address
 
 `claude@<repo>#<session>`: the harness is fixed by your token, `<repo>` is the
-checkout directory's basename, `<session>` is the first eight characters of
-your Claude Code session id. Never recall it; compute it. `agent-bus whoami`
+main checkout's directory basename (a linked worktree names the same repo),
+`<session>` is the first eight characters of your Claude Code session id, or
+the seat label the owner launched you with (`AGENT_BUS_INSTANCE`). If the
+hook says `seat held:`, another session has that seat and you are on your
+session id; tell the owner in one line. Never recall it; compute it. `agent-bus whoami`
 prints it, and the SessionStart hook prints `you are <address>` every time
 context is rebuilt. Before acting on any bus history, run `whoami`; rows
 marked `(you)` are yours, `(another claude)` is a different session of your

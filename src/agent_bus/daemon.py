@@ -19,6 +19,7 @@ import secrets
 import socket
 import sqlite3
 from contextvars import ContextVar
+from dataclasses import replace
 from importlib.resources import files
 from pathlib import Path
 from urllib.parse import unquote
@@ -85,6 +86,8 @@ def participant_auth(app, store, admin_token):
             cwd=headers.get("x-bus-cwd") or None,
             peer=scope["client"][0] if scope.get("client") else None,
             machine=machine,
+            checkout=headers.get("x-bus-checkout") or None,
+            session=headers.get("x-bus-session") or None,
         )
         reset = caller.set(identity)
         try:
@@ -101,7 +104,7 @@ def participant(instance=None):
     if identity.harness == ADMIN:
         raise ValueError("the admin token cannot send or read; enroll a participant")
     if instance:
-        identity = Identity(identity.harness, instance, identity.host, identity.pid, identity.cwd, identity.peer, identity.machine)
+        identity = replace(identity, instance=instance, session=None)
     return identity
 
 
@@ -192,6 +195,8 @@ def build_server(store):
     async def api_whoami(request):
         identity = participant()
         repo = request.query_params.get("repo") or (Path(identity.cwd).name if identity.cwd else None)
+        if repo:
+            store.claim(identity, identity.address(repo))
         return {"harness": identity.harness, "machine": identity.machine, "instance": identity.instance, "host": identity.host, "address": identity.address(repo) if repo else None}
 
     @server.custom_route("/api/send", methods=["POST"])

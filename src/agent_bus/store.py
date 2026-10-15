@@ -43,6 +43,10 @@ DEFAULT_THREAD = "general"
 DEFAULT_INSTANCE = "default"
 # An instance counts as active in who() if it called any tool within this window.
 ACTIVE_WINDOW = timedelta(minutes=15)
+# A seat label is held by one session at a time: another session presenting it is refused
+# with this marker until the holder has been quiet for ACTIVE_WINDOW, and the client falls
+# back to its own session id. Clients match on the marker, so it is wire text.
+SEAT_HELD = "seat held:"
 # How long a writer waits for another process's transaction before giving up. Only the
 # simulator has more than one writer process; the daemon is one process behind one lock.
 BUSY_TIMEOUT_MS = 5000
@@ -88,6 +92,11 @@ CREATE TABLE IF NOT EXISTS seen (
     address TEXT PRIMARY KEY,
     harness TEXT NOT NULL,
     host TEXT,
+    ts TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS seats (
+    address TEXT PRIMARY KEY,
+    session TEXT NOT NULL,
     ts TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS participants (
@@ -150,12 +159,17 @@ class Identity:
     cwd: str | None = None
     peer: str | None = None
     machine: str | None = None
+    checkout: str | None = None
+    session: str | None = None  # the harness session behind a seat label, when the instance is one
 
     def address(self, repo):
-        """The derived sender address. The caller's own checkout wins over the message's repo.
-        Every component obeys the address grammar, so a sender is always reachable and parseable:
-        a checkout name or a reported session id that would not fit is refused, not stored."""
-        own = check_slug("checkout name", Path(self.cwd).name) if self.cwd else repo
+        """The derived sender address. The caller's own checkout wins over the message's repo:
+        the name it reports (a linked worktree reports its main checkout's), else its cwd's
+        basename, for a client that predates the report. Every component obeys the address
+        grammar, so a sender is always reachable and parseable: a checkout name or a reported
+        session id that would not fit is refused, not stored."""
+        own = self.checkout or (Path(self.cwd).name if self.cwd else None)
+        own = check_slug("checkout name", own) if own else repo
         return f"{self.harness}@{own}#{check_slug('instance', self.instance or DEFAULT_INSTANCE)}"
 
 
@@ -311,7 +325,25 @@ class Store:
     # messages
 
     def touch(self, identity, address):
+        if identity.session and parse_address(address)[2] == identity.instance:
+            self.hold_seat(identity, address)
         self.db.execute("INSERT INTO seen (address, harness, host, ts) VALUES (?, ?, ?, ?) ON CONFLICT(address) DO UPDATE SET host = excluded.host, ts = excluded.ts", (address, identity.harness, identity.host, now()))
+
+    def hold_seat(self, identity, address):
+        """Refuse a seat label another session holds; otherwise take or refresh it. Two
+        sessions in one seat would read and ack each other's mail, which is what an
+        accidentally exported AGENT_BUS_INSTANCE would otherwise do."""
+        row = self.db.execute("SELECT session, ts FROM seats WHERE address = ?", (address,)).fetchone()
+        cutoff = (datetime.now(timezone.utc) - ACTIVE_WINDOW).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        if row and row[0] != identity.session and row[1] >= cutoff:
+            raise ValueError(f"{SEAT_HELD} {address} is held by session {row[0]}, last seen {row[1]}; it frees after {ACTIVE_WINDOW} without a call")
+        self.db.execute("INSERT INTO seats (address, session, ts) VALUES (?, ?, ?) ON CONFLICT(address) DO UPDATE SET session = excluded.session, ts = excluded.ts", (address, identity.session, now()))
+
+    @locked
+    def claim(self, identity, address):
+        """A labelled caller's whoami: learn whether the seat is free, and take it if so."""
+        if identity.session:
+            self.touch(identity, address)
 
     def own_address(self, identity, me):
         agent, _, _ = parse_address(me)
@@ -511,7 +543,7 @@ class Store:
             cur = self.db.execute(query)
             names = [c[0] for c in cur.description]
             return [dict(zip(names, r)) for r in cur.fetchall()]
-        tables = ("messages", "receipts", "seen", "participants", "ledger")
+        tables = ("messages", "receipts", "seen", "seats", "participants", "ledger")
         schema = {t: [{"name": c[1], "type": c[2], "notnull": bool(c[3]), "pk": bool(c[5])} for c in self.db.execute(f"PRAGMA table_info({t})") if c[1] != "token_hash"] for t in tables}
         messages = rows("SELECT * FROM messages ORDER BY id")
         for m in messages:
@@ -522,6 +554,7 @@ class Store:
             "messages": messages,
             "receipts": rows("SELECT * FROM receipts ORDER BY ts, message_id"),
             "seen": rows("SELECT * FROM seen ORDER BY ts"),
+            "seats": rows("SELECT * FROM seats ORDER BY ts"),
             "participants": rows(f"SELECT {', '.join(participant_cols)} FROM participants ORDER BY ts"),
             "ledger": rows("SELECT * FROM ledger ORDER BY seq"),
         }

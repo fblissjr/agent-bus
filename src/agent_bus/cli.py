@@ -59,20 +59,38 @@ def detect_harness():
 
 
 def detect_instance(harness, hook_in=None):
-    """The harness's session id, shortened. Hook stdin wins; then the environment; else None (daemon uses 'default')."""
+    """A deliberate label (AGENT_BUS_INSTANCE) wins everywhere, so a named seat is one
+    address for its hooks and its commands alike. Otherwise the harness's session id."""
+    return os.environ.get("AGENT_BUS_INSTANCE") or detect_session(harness, hook_in)
+
+
+def detect_session(harness, hook_in=None):
+    """The harness's session id, shortened: hook stdin, then the environment; else None
+    (daemon uses 'default'). Antigravity's hook is handed the conversation id, so the
+    environment prefers it too."""
     raw = None
     if hook_in:
         raw = hook_in.get("session_id") or hook_in.get("conversationId")
-    raw = raw or os.environ.get("AGENT_BUS_INSTANCE") or {
+    raw = raw or {
         "claude": os.environ.get("CLAUDE_CODE_SESSION_ID"),
-        "antigravity": os.environ.get("ANTIGRAVITY_TRAJECTORY_ID") or os.environ.get("ANTIGRAVITY_CONVERSATION_ID"),
+        "antigravity": os.environ.get("ANTIGRAVITY_CONVERSATION_ID") or os.environ.get("ANTIGRAVITY_TRAJECTORY_ID"),
         "codex": os.environ.get("CODEX_SESSION_ID"),
     }.get(harness)
     return raw[:8] if raw else None
 
 
 def detect_repo(start=None):
+    """The main checkout's basename. A linked worktree shares the main checkout's git
+    directory, so it names the same repo and reads the same mail; the worktree's own
+    directory name is a topic, not a repo."""
     cur = Path(start or Path.cwd())
+    try:
+        res = subprocess.run(["git", "-C", str(cur), "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True, check=True)
+        common = Path(res.stdout.strip())
+        if common.name == ".git":
+            return common.parent.name
+    except (subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError):
+        pass
     for p in [cur] + list(cur.parents):
         if (p / ".git").exists():
             return p.name
@@ -136,17 +154,21 @@ def enrolled_token_destination(name, machine, euid=None, this_host=None):
 
 # transport
 
-def api_call(endpoint, token, method="GET", payload=None, instance=None):
+def api_call(endpoint, token, method="GET", payload=None, instance=None, cwd=None, checkout=None, session=None):
     url = f"{DEFAULT_SERVER}{endpoint}"
     headers = {
         "Authorization": f"Bearer {token}",
         "User-Agent": "agent-bus-cli/2",
         "X-Bus-Host": socket.gethostname(),
         "X-Bus-Pid": str(os.environ.get("CLAUDE_PID") or os.getppid()),
-        "X-Bus-Cwd": os.getcwd(),
+        "X-Bus-Cwd": cwd or os.getcwd(),
     }
     if instance:
         headers["X-Bus-Instance"] = instance
+    if checkout:
+        headers["X-Bus-Checkout"] = checkout
+    if session:
+        headers["X-Bus-Session"] = session
     data = None
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
@@ -183,7 +205,7 @@ def store_module():
     return store
 
 
-def direct_call(endpoint, harness, method="GET", payload=None, instance=None):
+def direct_call(endpoint, harness, method="GET", payload=None, instance=None, cwd=None, checkout=None, session=None):
     """What api_call does over HTTP, dispatched to the store in this process. The daemon
     verifies a harness from its token; here the harness is claimed, and the row's machine
     and peer say so. `admin` audits and cannot take part, as on the daemon."""
@@ -192,7 +214,7 @@ def direct_call(endpoint, harness, method="GET", payload=None, instance=None):
     q = dict(urllib.parse.parse_qsl(query))
     p = payload or {}
     pid = os.environ.get("CLAUDE_PID") or os.getppid()
-    identity = st.Identity(harness=harness, instance=instance, host=socket.gethostname(), pid=int(pid), cwd=os.getcwd(), peer=st.SIM_PEER, machine=st.SIM_MACHINE)
+    identity = st.Identity(harness=harness, instance=instance, host=socket.gethostname(), pid=int(pid), cwd=cwd or os.getcwd(), peer=st.SIM_PEER, machine=st.SIM_MACHINE, checkout=checkout, session=session)
     try:
         store = st.Store(sim_dir(), sim=True)
         if path == "/api/enroll":
@@ -219,6 +241,7 @@ def direct_call(endpoint, harness, method="GET", payload=None, instance=None):
             return store.who()
         if path == "/api/whoami":
             repo = q.get("repo") or Path(os.getcwd()).name
+            store.claim(identity, identity.address(repo))
             return {"harness": harness, "machine": identity.machine, "instance": instance, "host": identity.host, "address": identity.address(repo)}
         raise ValueError(f"no route {path}")
     except (ValueError, KeyError) as e:
@@ -241,7 +264,15 @@ class Caller:
     def __init__(self, harness=None, hook_in=None):
         self.harness = harness or detect_harness()
         self.instance = detect_instance(self.harness, hook_in)
-        self.repo = detect_repo(hook_in.get("cwd") if hook_in and hook_in.get("cwd") else None)
+        # Behind a seat label, the session it stands for: the store holds the seat for one session.
+        session = detect_session(self.harness, hook_in)
+        self.session = session if session and session != self.instance else None
+        self.seat_notice = None
+        self._settled = False
+        self._hook = hook_in is not None  # a hook prints the notice itself, where its harness shows it
+        # A hook runs where its harness puts it (Antigravity: the plugin directory); the session stands in hook_in's cwd.
+        self.cwd = (hook_in.get("cwd") if hook_in else None) or os.getcwd()
+        self.repo = detect_repo(self.cwd)
         self._token = None
 
     @property
@@ -252,12 +283,36 @@ class Caller:
 
     @property
     def me(self):
+        self.settle()
         return address(self.harness, self.repo, self.instance)
 
+    def settle(self):
+        """A seat label is taken once, before anything is read or sent under it. If another
+        session holds it, this session speaks as its own session id instead and says so."""
+        if not self.session or self._settled:
+            return
+        self._settled = True
+        try:
+            self._call(f"/api/whoami?{urllib.parse.urlencode({'repo': self.repo})}")
+        except (BusError, ValueError) as e:
+            # Anything but a held seat (a down daemon, a refused token) surfaces on the real call.
+            if store_module().SEAT_HELD not in str(e):
+                return
+            self.instance, self.session = self.session, None
+            self.seat_notice = f"[agent-bus] {e}. You are {address(self.harness, self.repo, self.instance)} until it frees."
+            if not self._hook:
+                print(self.seat_notice, file=sys.stderr)
+            return
+        # Held by this session now; every later call carries the session, which refreshes the hold.
+
     def call(self, endpoint, method="GET", payload=None):
+        self.settle()
+        return self._call(endpoint, method, payload)
+
+    def _call(self, endpoint, method="GET", payload=None):
         if sim_dir():
-            return direct_call(endpoint, self.harness, method, payload, self.instance)
-        return api_call(endpoint, self.token, method, payload, self.instance)
+            return direct_call(endpoint, self.harness, method, payload, self.instance, self.cwd, self.repo, self.session)
+        return api_call(endpoint, self.token, method, payload, self.instance, self.cwd, self.repo, self.session)
 
 
 def identity_of(addr):
@@ -523,7 +578,8 @@ def cmd_hook(args):
         # Antigravity's PreInvocation injection is reliable and fires per model call: ack on delivery.
         found = hook_notice(c, me)
         if found:
-            print(json.dumps({"injectSteps": [{"ephemeralMessage": found[0] + acked_trailer(agent, found[2])}]}))
+            seat = f"{c.seat_notice}\n\n" if c.seat_notice else ""
+            print(json.dumps({"injectSteps": [{"ephemeralMessage": seat + found[0] + acked_trailer(agent, found[2])}]}))
             hook_ack(c, me, found[1])
         else:
             print(json.dumps({}))
@@ -535,6 +591,8 @@ def cmd_hook(args):
         if hook_in.get("hook_event_name") == "SessionStart":
             lines.append(f"[agent-bus] you are {me}")
         found = hook_notice(c, me)
+        if c.seat_notice and (lines or found):
+            lines.append(c.seat_notice)
         if found:
             ids = " ".join(str(i) for i in found[1])
             lines.append(f"{found[0]}\n\nAck after reading: agent-bus ack {ids} --me {me}")

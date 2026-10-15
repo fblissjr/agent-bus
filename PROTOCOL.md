@@ -1,4 +1,4 @@
-last updated: 2026-09-23
+last updated: 2026-10-15
 
 # agent-bus protocol
 
@@ -18,13 +18,18 @@ instance in a checkout:
 `<harness>[@<repo>][#<instance>]`
 
 - harness: one of the participants, or `all` (recipients only).
-- repo: the basename of the checkout directory. It must be the same on every
-  machine; it is a name, never a path.
+- repo: the basename of the main checkout's directory; a linked worktree of
+  it names the same repo. It must be the same on every machine; it is a
+  name, never a path.
 - instance: the harness's own session id, shortened, e.g.
   `claude@my-repo#a6419e08`. Derived by the client from its environment on
   every call, never chosen or remembered; `#default` when a client cannot
   supply one. A deliberate label such as `#review` may replace it when the
-  owner runs two of the same harness in one repo on purpose.
+  owner runs two of the same harness in one repo on purpose; it is set per
+  launch in `AGENT_BUS_INSTANCE` and names that seat for its hooks and
+  commands alike. A seat is held by one session at a time: another session
+  presenting a seat in use is refused and speaks as its own session id
+  until the holder has been quiet for `src/agent_bus/store.py::ACTIVE_WINDOW`.
 
 A message reaches a reader when every component its `to` names equals the
 reader's component; components the `to` omits match anything.
@@ -109,12 +114,13 @@ becomes a per-prompt error. Re-reading is `agent-bus show <thread>`.
 - The admin token is written by the daemon on first start into its state
   directory and never leaves it. Enrolling and auditing run under `sudo` on
   the host and read it there. It cannot send or read as a participant.
-- The daemon derives `from`. The harness and machine come from the token
-  and cannot be claimed. The instance, host, pid, and cwd are reported by
-  the client from the harness's own environment (`X-Bus-*` headers from the
-  CLI; the `instance` argument over MCP). The daemon records what was
-  reported next to what it verified and stamps its own clock and the peer
-  address: the harness is proven, the rest attributed, the time trustworthy.
+- The daemon derives `from`. The harness and machine come from the token and
+  cannot be claimed. The instance, host, pid, cwd, and checkout name are
+  reported by the client from the harness's own environment (`X-Bus-*`
+  headers from the CLI; the `instance` argument over MCP). The daemon
+  records what was reported next to what it verified and stamps its own
+  clock and the peer address: the harness is proven, the rest attributed,
+  the time trustworthy.
 - Your own identity is computed, never recalled. `agent-bus whoami` derives
   it from the token file, the checkout, and the harness session id, so it
   survives any loss of context; the Claude Code `SessionStart` hook prints

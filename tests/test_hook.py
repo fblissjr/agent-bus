@@ -125,6 +125,23 @@ def test_identity_headers_come_from_the_session(stub):
     assert stub.headers[0]["X-Bus-Host"] and stub.headers[0]["X-Bus-Cwd"]
 
 
+def test_a_seat_label_beats_the_session_id(stub):
+    """AGENT_BUS_INSTANCE names a seat; the hook reads that seat's inbox, not the session id's."""
+    stub.inbox = [MESSAGE]
+    r = run_hook("claude", stub.url, stdin=CLAUDE_START, env_extra={"AGENT_BUS_INSTANCE": "mrtall"})
+    out = r.stdout.decode()
+    assert out.startswith("[agent-bus] you are claude@repo#mrtall")
+    assert "agent-bus ack 7 --me claude@repo#mrtall" in out
+    assert stub.headers[0]["X-Bus-Instance"] == "mrtall"
+
+
+def test_hook_reports_the_session_cwd_not_its_own(stub):
+    """Antigravity runs its hook from the plugin directory; the ledger's cwd is the workspace."""
+    run_hook("antigravity", stub.url, stdin=json.dumps({"conversationId": "b2d1b325-5033", "workspacePaths": ["/tmp/some-repo"]}).encode())
+    run_hook("claude", stub.url, stdin=CLAUDE_PROMPT)
+    assert [h["X-Bus-Cwd"] for h in stub.headers] == ["/tmp/some-repo", "/x/y/repo"]
+
+
 def test_silent_without_mail(stub):
     r = run_hook("claude", stub.url, stdin=CLAUDE_PROMPT)
     assert r.returncode == 0 and r.stdout == b"" and r.stderr == b""

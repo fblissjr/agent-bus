@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.10
+
+- A linked worktree is in its main checkout's repo. `detect_repo` names the
+  repo from `git rev-parse --git-common-dir`, and the CLI reports that name
+  in `X-Bus-Checkout`, which `Identity.address` prefers over the cwd's
+  basename. A seat working in `<worktrees>/<seat>-<topic>` was addressed
+  as the topic and never saw mail sent to its repo.
+- A seat label (`AGENT_BUS_INSTANCE`) wins over the session id from hook
+  stdin, uncut, so a named seat has one address for its hooks and its
+  commands. It used to name only the commands.
+- A seat is held by one session at a time. Behind a label the CLI reports
+  the session (`X-Bus-Session`); the store keeps `seats` and refuses a
+  second session presenting a live seat (`store.py::SEAT_HELD`) until the
+  holder has been quiet for `store.py::ACTIVE_WINDOW`. The refused session
+  speaks as its own session id and the hook says so, so a label exported
+  by accident cannot put two sessions in one inbox. The register shows the
+  table.
+- An Antigravity session's commands use the conversation id, as its hook
+  does; they used the trajectory id, so one session had two addresses.
+- A hook reports the session's cwd from its stdin. Antigravity runs plugin
+  hooks from the plugin's directory, so the ledger recorded that.
+- The build backend range admits uv 0.13, which `uv lock` warned about.
+
 ## 0.5.9
 
 - The skill gains "Answering a question": observe before excavating, a

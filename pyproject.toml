@@ -1,6 +1,6 @@
 [project]
 name = "agent-bus"
-version = "0.5.9"
+version = "0.5.10"
 description = "Message bus for agents and anything else that follows its protocol: MCP over HTTP, a SQLite store, and a CLI for hooks and humans"
 readme = "README.md"
 license = "MIT"
@@ -20,5 +20,5 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.12.13,<0.13.0"]
+requires = ["uv_build>=0.12.13,<0.14.0"]
 build-backend = "uv_build"
