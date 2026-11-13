@@ -553,6 +553,7 @@ class Store:
             m["files"] = json.loads(m["files"])
         participant_cols = [c["name"] for c in schema["participants"]]
         return {
+            "active_window": int(ACTIVE_WINDOW.total_seconds()),
             "schema": schema,
             "messages": messages,
             "receipts": rows("SELECT * FROM receipts ORDER BY ts, message_id"),

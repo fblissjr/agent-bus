@@ -121,7 +121,55 @@ tr.hidden { display: none; }
 .vocab dt { font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 500; } .vocab dd { margin: 0; color: var(--muted); }
 .sig-legend { display: grid; gap: 6px; font-size: 14px; }
 .note { border-left: 3px solid var(--accent); padding-left: 12px; color: var(--muted); font-size: 14px; }
-@media (max-width: 520px) { .log .item { grid-template-columns: 1fr; } .log .t { padding-top: 0; } .vocab dl { grid-template-columns: 1fr; } }
+/* members */
+.ws { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.ws .card { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line-strong); padding: 10px 12px; display: grid; gap: 6px; min-width: 0; }
+.ws .card.REQUEST { border-left-color: var(--request); } .ws .card.BLOCKED { border-left-color: var(--blocked); } .ws .card.DONE { border-left-color: var(--done); } .ws .card.ANSWER { border-left-color: var(--answer); } .ws .card.FYI { border-left-color: var(--fyi); }
+.ws .name { font-family: var(--mono); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.ws .line { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.group-label { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 6px 0 4px; }
+.roster { display: grid; border: 1px solid var(--line); background: var(--surface); }
+.member { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); align-items: start; }
+.member:last-child { border-bottom: 0; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-weight: 500; font-size: 14px; background: var(--surface-2); border: 2px solid var(--line-strong); color: var(--ink); position: relative; }
+.avatar.REQUEST { border-color: var(--request); } .avatar.BLOCKED { border-color: var(--blocked); } .avatar.DONE { border-color: var(--done); } .avatar.ANSWER { border-color: var(--answer); } .avatar.FYI { border-color: var(--fyi); }
+.avatar .dot { position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--done); border: 2px solid var(--surface); }
+.member .who { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.member .who b { font-family: var(--mono); font-weight: 500; font-size: 14px; overflow-wrap: anywhere; }
+.member .work { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.member .side { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--faint); white-space: nowrap; display: grid; gap: 4px; justify-items: end; }
+.member .insts { font-family: var(--mono); font-size: 12px; color: var(--faint); overflow-wrap: anywhere; }
+.chip.unread { background: var(--request-bg); color: var(--request); border-color: transparent; }
+/* graph */
+.gctl { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.gctl .transport { display: flex; gap: 4px; align-items: center; }
+.gctl input[type=range] { flex: 1 1 220px; min-width: 160px; accent-color: var(--accent); }
+.gctl .pos { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.gctl label.tog { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+.gctl select { min-width: 0; font-size: 13px; padding: 4px 6px; }
+.chipbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.gwrap { background: var(--surface); border: 1px solid var(--line); }
+.gwrap svg { display: block; width: 100%; height: auto; }
+svg .edge { fill: none; stroke: var(--line-strong); }
+svg .edge.bcast { stroke-dasharray: 5 4; }
+svg .edge.addressed { stroke-dasharray: 2 4; }
+svg .edge.latest { stroke: var(--accent); }
+svg .arrow { fill: var(--line-strong); } svg .arrow.latest { fill: var(--accent); }
+svg .node circle, svg .node rect { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 2; }
+svg .node.group circle { stroke-dasharray: 4 3; fill: var(--surface); }
+svg .node.REQUEST circle, svg .node.REQUEST rect { stroke: var(--request); } svg .node.BLOCKED circle, svg .node.BLOCKED rect { stroke: var(--blocked); }
+svg .node.DONE circle, svg .node.DONE rect { stroke: var(--done); } svg .node.ANSWER circle, svg .node.ANSWER rect { stroke: var(--answer); } svg .node.FYI circle, svg .node.FYI rect { stroke: var(--fyi); }
+svg .node.current circle, svg .node.current rect { stroke-width: 3.5; }
+svg .node.quiet { opacity: .3; }
+svg .node text { fill: var(--ink); font-family: var(--mono); font-size: 12px; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+svg .node text.mono1 { font-size: 14px; font-weight: 500; stroke: none; }
+svg .node .badge text { stroke: none; }
+svg .node text.sub { fill: var(--muted); font-size: 11px; }
+svg .badge circle { fill: var(--request); stroke: var(--surface); stroke-width: 2; }
+svg .badge text { fill: var(--surface); font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.glegend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); padding: 8px 12px; border-top: 1px solid var(--line); }
+.post { background: var(--surface); border: 1px solid var(--line); padding: 12px 14px; display: grid; gap: 8px; }
+@media (max-width: 520px) { .log .item { grid-template-columns: 1fr; } .log .t { padding-top: 0; } .vocab dl { grid-template-columns: 1fr; } .member { grid-template-columns: 34px minmax(0, 1fr); } .member .side { grid-column: 2; text-align: left; justify-items: start; } }
 @media (prefers-reduced-motion: no-preference) { nav.tabs button { transition: color .15s, border-color .15s; } }
 </style>
 
@@ -137,6 +185,8 @@ tr.hidden { display: none; }
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button role="tab" id="tab-log" aria-selected="true" aria-controls="panel-log">Day log</button>
     <button role="tab" id="tab-messages" aria-selected="false" aria-controls="panel-messages">Messages</button>
+    <button role="tab" id="tab-members" aria-selected="false" aria-controls="panel-members">Members</button>
+    <button role="tab" id="tab-graph" aria-selected="false" aria-controls="panel-graph">Graph</button>
     <button role="tab" id="tab-tables" aria-selected="false" aria-controls="panel-tables">Tables</button>
     <button role="tab" id="tab-vocab" aria-selected="false" aria-controls="panel-vocab">Common language</button>
     <span class="spacer"></span>
@@ -160,6 +210,53 @@ tr.hidden { display: none; }
     </div>
     <div class="meta" id="msg-count"></div>
     <div id="threads" style="display:grid; gap:24px"></div>
+  </section>
+
+  <section class="panel" id="panel-members" role="tabpanel" aria-labelledby="tab-members" hidden>
+    <div>
+      <h2>Who is on what</h2>
+      <p class="meta" id="members-note"></p>
+    </div>
+    <div class="filters">
+      <label>Repo <select id="m-repo"><option value="">all</option></select></label>
+    </div>
+    <div>
+      <div class="group-label">Workstreams <span id="ws-count"></span></div>
+      <div class="ws" id="ws"></div>
+    </div>
+    <div id="roster"></div>
+  </section>
+
+  <section class="panel" id="panel-graph" role="tabpanel" aria-labelledby="tab-graph" hidden>
+    <div>
+      <h2>Who asked whom, replayed</h2>
+      <p class="meta">Step through the messages in order. "Who → whom" draws an arrow per sender and recipient, wider with each message. "Owner → threads → agents" puts you on the left, each thread in the middle, and everyone who sent into it on the right.</p>
+    </div>
+    <div class="gctl">
+      <div class="transport">
+        <button class="chipbtn" id="g-first" title="First message" aria-label="First message">|◀</button>
+        <button class="chipbtn" id="g-prev" title="Previous message (left arrow)" aria-label="Previous message">◀</button>
+        <button class="chipbtn" id="g-play" title="Play or pause (space)" aria-label="Play">▶ play</button>
+        <button class="chipbtn" id="g-next" title="Next message (right arrow)" aria-label="Next message">▶</button>
+        <button class="chipbtn" id="g-last" title="Latest message" aria-label="Latest message">▶|</button>
+      </div>
+      <input type="range" id="g-range" min="0" max="0" value="0" aria-label="Replay position">
+      <span class="pos" id="g-pos"></span>
+    </div>
+    <div class="gctl">
+      <label class="tog">View <select id="g-lens"><option value="who">who → whom</option><option value="threads">owner → threads → agents</option></select></label>
+      <label class="tog">Repo <select id="g-repo"><option value="">all</option></select></label>
+      <label class="tog">Thread <select id="g-thread"><option value="">all</option></select></label>
+      <label class="tog">Speed <select id="g-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+      <label class="tog"><input type="checkbox" id="g-inst"> instances</label>
+      <label class="tog"><input type="checkbox" id="g-expand"> expand all@</label>
+      <label class="tog"><input type="checkbox" id="g-quiet"> hide quiet</label>
+    </div>
+    <div class="gwrap">
+      <svg id="g-svg" role="img" aria-label="Message graph"></svg>
+      <div class="glegend" id="g-legend"></div>
+    </div>
+    <div class="post" id="g-post"></div>
   </section>
 
   <section class="panel" id="panel-tables" role="tabpanel" aria-labelledby="tab-tables" hidden>
@@ -272,7 +369,8 @@ files: &lt;path&gt;, &lt;path&gt;
   tabs.forEach((b) => b.addEventListener("click", () => show(b.id.replace("tab-", ""))));
   let initial = "log";
   try { initial = localStorage.getItem("register-tab") || initial; } catch (e) {}
-  if (location.hash && ["log","messages","tables","vocab"].includes(location.hash.slice(1))) initial = location.hash.slice(1);
+  if (location.hash && ["log","messages","members","graph","tables","vocab"].includes(location.hash.slice(1))) initial = location.hash.slice(1);
+  if (!document.getElementById("panel-" + initial)) initial = "log";
   show(initial);
 
   // day log
@@ -404,5 +502,275 @@ files: &lt;path&gt;, &lt;path&gt;
   $("#t-seats").innerHTML = D.schema.seats ? table(D.seats, colsOf("seats")) : "";
   $("#t-messages").innerHTML = table(D.messages, colsOf("messages"), ["body"]);
   ["#t-receipts", "#t-ledger", "#t-participants", "#t-seen", "#t-seats", "#t-messages"].forEach((s) => enhance($(s)));
+
+  // ---- shared by Members and Graph. A scope is harness@repo, the receipt scope: instances
+  // come and go with sessions, the scope is what a receipt and an inbox are counted against.
+  const scopeOf = (addr) => addr.split("#")[0];
+  const parse = (addr) => { const [hr, inst] = addr.split("#"); const [h, r] = hr.split("@"); return { harness: h, repo: r || null, instance: inst || null }; };
+  const firstLine = (s, n = 140) => { const l = String(s || "").split("\n")[0]; return l.length > n ? l.slice(0, n) + "…" : l; };
+  const OPEN = { BLOCKED: 2, REQUEST: 1 };
+  const genMs = Date.parse(D.generated);
+  const windowS = typeof D.active_window === "number" ? D.active_window : null;
+  const ago = (iso) => { const s = Math.max(0, Math.round((genMs - Date.parse(iso)) / 1000)); return s < 90 ? s + "s" : s < 5400 ? Math.round(s / 60) + "m" : s < 172800 ? Math.round(s / 3600) + "h" : Math.round(s / 86400) + "d"; };
+  // Addressed the way the store's inbox counts it, at scope level; a scope's own sends are not its mail.
+  const addressedTo = (m, scope) => { const p = parse(scope); return (m.to_agent === p.harness || m.to_agent === "all") && (m.to_repo == null || m.to_repo === p.repo) && scopeOf(m.sender) !== scope; };
+  const readBy = (m, scope, cutoff) => D.receipts.some((r) => r.message_id === m.id && r.reader === scope && (!cutoff || r.ts <= cutoff));
+  const unreadFor = (scope, msgs, cutoff) => msgs.filter((m) => addressedTo(m, scope) && !readBy(m, scope, cutoff));
+  const statusChip = (m) => `<span class="chip status ${m.status}">${m.status}${m.verb ? " " + esc(m.verb) : ""}</span>`;
+  const repos = [...new Set(D.messages.map((m) => m.repo).concat(D.seen.map((s) => parse(s.address).repo).filter(Boolean)))].sort();
+  function goto(tab, id) { show(tab); applyWide(); if (id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ block: "start" }); } }
+
+  // ---- members: workstreams (one per thread, open ones first), then a roster per scope
+  fill($("#m-repo"), repos);
+  $("#members-note").textContent = (windowS ? `Active means an instance was heard from within ${Math.round(windowS / 60)} minutes of ${D.generated}, the store's ACTIVE_WINDOW. ` : "This export does not carry the store's presence window, so nobody is marked active. ")
+    + "Unread counts receipts the way the store does, per harness@repo. A workstream is open while its last message is a REQUEST or BLOCKED, or while one sent to someone by name is still unread by them.";
+  function scopes(repo) {
+    const set = new Set();
+    D.seen.forEach((s) => set.add(scopeOf(s.address)));
+    D.messages.forEach((m) => { set.add(scopeOf(m.sender)); if (m.to_agent !== "all") set.add(scopeOf(m.recipient)); });
+    return [...set].filter((s) => !repo || parse(s).repo === repo);
+  }
+  function renderMembers() {
+    const repo = $("#m-repo").value;
+    const msgs = D.messages.filter((m) => !repo || m.repo === repo);
+    // workstreams
+    const byThread = new Map();
+    msgs.forEach((m) => { const k = m.repo + "/" + m.thread; if (!byThread.has(k)) byThread.set(k, []); byThread.get(k).push(m); });
+    // Open: the last message asks or is blocked, or a REQUEST or BLOCKED sent to someone by name
+    // is still unacked by them. Waiting on: whoever those are.
+    const ws = [...byThread.entries()].map(([k, ms]) => {
+      const last = ms[ms.length - 1];
+      const waiting = new Set();
+      if (OPEN[last.status]) waiting.add(last.to_agent === "all" ? `everyone in ${last.to_repo || "every repo"}` : scopeOf(last.recipient));
+      ms.forEach((m) => { if (OPEN[m.status] && m.to_agent !== "all" && !readBy(m, scopeOf(m.recipient), null)) waiting.add(scopeOf(m.recipient)); });
+      const worst = Math.max(OPEN[last.status] || 0, ...ms.filter((m) => OPEN[m.status] && m.to_agent !== "all" && !readBy(m, scopeOf(m.recipient), null)).map((m) => OPEN[m.status]));
+      return { k, ms, last, waiting: [...waiting], worst };
+    }).sort((a, b) => b.worst - a.worst || b.last.id - a.last.id);
+    const openN = ws.filter((w) => w.worst).length;
+    $("#ws-count").textContent = `· ${openN} open of ${ws.length}`;
+    $("#ws").innerHTML = ws.map((w) => {
+      const people = [...new Set(w.ms.map((m) => scopeOf(m.sender)))];
+      const cls = w.worst === 2 ? "BLOCKED" : w.worst === 1 ? "REQUEST" : w.last.status;
+      return `<div class="card ${cls}">
+        <div class="chips"><span class="name">${esc(w.k)}</span>${statusChip(w.last)}</div>
+        <div class="line">${w.waiting.length ? `waiting on <b>${w.waiting.map(esc).join(", ")}</b> · ` : ""}last #${w.last.id} from ${esc(scopeOf(w.last.sender))}, ${ago(w.last.ts)} before the export</div>
+        <div class="line">${esc(firstLine(w.last.body))}</div>
+        <div class="chips">${people.map((p) => `<span class="chip">${esc(p)}</span>`).join("")}<span class="chip">${w.ms.length} msg</span></div>
+        <div class="row-actions"><button class="chipbtn" data-replay="${esc(w.k)}">replay</button><button class="chipbtn" data-open-thread="${esc(w.k)}">messages</button></div>
+      </div>`;
+    }).join("") || `<p class="meta">No messages in this repo.</p>`;
+    // roster
+    const rows = scopes(repo).map((s) => {
+      const p = parse(s);
+      const insts = D.seen.filter((x) => scopeOf(x.address) === s).sort((a, b) => b.ts.localeCompare(a.ts));
+      const sent = D.messages.filter((m) => scopeOf(m.sender) === s);
+      const last = sent[sent.length - 1];
+      const seenTs = [insts[0] && insts[0].ts, last && last.ts].filter(Boolean).sort().pop() || null;
+      const active = windowS != null && seenTs && genMs - Date.parse(seenTs) <= windowS * 1000;
+      const unread = unreadFor(s, D.messages, null);
+      const asks = unread.filter((m) => OPEN[m.status]);
+      const group = p.harness === "owner" ? "Owner" : !seenTs ? "Addressed, never heard from" : active ? "Active" : windowS == null ? "Participants" : "Quiet";
+      return { s, p, insts, sent, last, seenTs, active, unread, asks, group };
+    });
+    const order = ["Owner", "Active", "Participants", "Quiet", "Addressed, never heard from"];
+    const seatOf = (addr) => (D.seats || []).find((x) => x.address === addr);
+    $("#roster").innerHTML = order.map((g) => {
+      const rs = rows.filter((r) => r.group === g).sort((a, b) => (b.seenTs || "").localeCompare(a.seenTs || ""));
+      if (!rs.length) return "";
+      return `<div class="group-label">${g} · ${rs.length}</div><div class="roster">${rs.map((r) => `
+        <div class="member">
+          <div class="avatar ${r.last ? r.last.status : ""}" title="${r.last ? "last sent " + r.last.status : "has sent nothing"}">${esc(r.p.harness.slice(0, 1).toUpperCase())}${r.active ? `<span class="dot" title="active"></span>` : ""}</div>
+          <div style="display:grid; gap:3px; min-width:0">
+            <div class="who"><b>${esc(r.s)}</b>${r.last ? statusChip(r.last) + `<span class="chip">${esc(r.last.thread)}</span>` : ""}${r.asks.length ? `<span class="chip unread" title="unread REQUEST or BLOCKED addressed here">${r.asks.length} open unread</span>` : ""}${r.unread.length > r.asks.length ? `<span class="chip">${r.unread.length - r.asks.length} other unread</span>` : ""}</div>
+            <div class="work">${r.last ? esc(firstLine(r.last.body)) : "No posts yet"}</div>
+            ${r.insts.length ? `<div class="insts">${r.insts.map((i) => { const seat = seatOf(i.address); return esc("#" + (parse(i.address).instance || "default")) + (seat ? ` (seat, session ${esc(seat.session)})` : "") + ` ${ago(i.ts)}`; }).join(" · ")}</div>` : ""}
+          </div>
+          <div class="side"><span>${r.seenTs ? "seen " + ago(r.seenTs) + " before" : "never seen"}</span><span>${r.sent.length} sent</span></div>
+        </div>`).join("")}</div>`;
+    }).join("");
+  }
+  $("#m-repo").addEventListener("change", renderMembers);
+  renderMembers();
+  document.addEventListener("click", (e) => {
+    const r = e.target.closest("[data-replay]");
+    if (r) { const k = r.dataset.replay; G.repo = ""; G.thread = k; $("#g-repo").value = ""; $("#g-thread").value = k; G.step = 0; goto("graph"); renderGraph(); play(true); return; }
+    const o = e.target.closest("[data-open-thread]");
+    if (o) { $("#f-thread").value = o.dataset.openThread; ["#f-harness", "#f-status", "#f-sig"].forEach((s) => ($(s).value = "")); renderMessages(); goto("messages"); }
+    const g = e.target.closest("[data-goto]");
+    if (g) { ["#f-thread", "#f-harness", "#f-status", "#f-sig"].forEach((s) => ($(s).value = "")); renderMessages(); goto("messages", "m" + g.dataset.goto); }
+  });
+
+  // ---- graph: a replay over the messages in id order
+  const G = { step: Infinity, lens: "who", inst: false, expand: false, quiet: false, repo: "", thread: "", timer: null };
+  fill($("#g-repo"), repos);
+  fill($("#g-thread"), threads);
+  const NS = "http://www.w3.org/2000/svg";
+  const NR = 22;
+  const gMsgs = () => D.messages.filter((m) => (!G.repo || m.repo === G.repo) && (!G.thread || m.repo + "/" + m.thread === G.thread));
+  const nodeOf = (addr) => (G.inst ? addr : scopeOf(addr));
+  const isGroup = (key) => key.startsWith("all") || (G.inst && !key.includes("#"));
+  const rank = (k) => (k.startsWith("owner") ? 0 : k.startsWith("all") ? 2 : 1);
+  const trim = (p, t, d) => { const dx = t.x - p.x, dy = t.y - p.y, l = Math.hypot(dx, dy) || 1; return { x: p.x + dx / l * d, y: p.y + dy / l * d }; };
+  function targetsOf(m, known) {
+    if (m.to_agent !== "all") return { keys: [nodeOf(m.recipient)], bcast: false };
+    if (!G.expand) return { keys: [scopeOf(m.recipient)], bcast: true };
+    const from = nodeOf(m.sender);
+    return { keys: known.filter((k) => k !== from && !isGroup(k) && (m.to_repo == null || parse(k).repo === m.to_repo) && scopeOf(k) !== scopeOf(m.sender)), bcast: true };
+  }
+  function play(on) {
+    if (G.timer) { clearInterval(G.timer); G.timer = null; }
+    if (on) {
+      const n = gMsgs().length;
+      if (G.step >= n - 1) G.step = 0;
+      G.timer = setInterval(() => { if (G.step >= gMsgs().length - 1) return play(false); G.step++; renderGraph(); }, 1000 / Number($("#g-speed").value));
+    }
+    const b = $("#g-play"); b.textContent = G.timer ? "❚❚ pause" : "▶ play"; b.setAttribute("aria-pressed", !!G.timer); b.setAttribute("aria-label", G.timer ? "Pause" : "Play");
+  }
+  function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+  function txt(parent, x, y, s, cls, anchor = "middle") { const t = el("text", { x, y, "text-anchor": anchor, class: cls || "" }, parent); t.textContent = s; return t; }
+
+  function renderGraph() {
+    const ms = gMsgs(), N = ms.length, svg = $("#g-svg");
+    svg.innerHTML = "";
+    $("#g-range").max = Math.max(0, N - 1);
+    if (!N) { svg.setAttribute("viewBox", "0 0 800 80"); txt(svg, 400, 45, "No messages match these filters.", "sub"); $("#g-pos").textContent = ""; $("#g-post").innerHTML = ""; $("#g-legend").innerHTML = ""; return; }
+    G.step = Math.max(0, Math.min(G.step, N - 1));
+    $("#g-range").value = G.step;
+    const upto = ms.slice(0, G.step + 1), cur = ms[G.step];
+    $("#g-pos").textContent = `${G.step + 1} of ${N} · #${cur.id} at ${cur.ts.slice(11, 19)}Z`;
+    // every node the filtered run will ever show, so positions hold still during the replay
+    const firstAt = new Map();
+    const note = (k, i) => { if (!firstAt.has(k)) firstAt.set(k, i); };
+    if (G.lens === "who") {
+      ms.forEach((m, i) => { note(nodeOf(m.sender), i); if (m.to_agent !== "all") note(nodeOf(m.recipient), i); else if (!G.expand) note(scopeOf(m.recipient), i); });
+    } else {
+      ms.forEach((m, i) => { note(nodeOf(m.sender), i); note("thread:" + m.repo + "/" + m.thread, i); if (m.to_agent !== "all") note(nodeOf(m.recipient), i); });
+    }
+    const all = [...firstAt.keys()];
+    const lastStatus = new Map();
+    upto.forEach((m) => { lastStatus.set(nodeOf(m.sender), m.status); lastStatus.set("thread:" + m.repo + "/" + m.thread, m.status); });
+    // edges up to this step
+    const edges = new Map();
+    const bump = (a, b, kind, i) => { const k = a + "|" + b; const e = edges.get(k) || { a, b, n: 0, kind, last: -1 }; e.n++; e.last = i; if (kind === "direct" || kind === "sent") e.kind = kind; edges.set(k, e); };
+    upto.forEach((m, i) => {
+      if (G.lens === "who") {
+        const known = all.filter((k) => firstAt.get(k) <= i);
+        const t = targetsOf(m, known);
+        t.keys.forEach((k) => bump(nodeOf(m.sender), k, t.bcast ? "bcast" : "direct", i));
+      } else {
+        const th = "thread:" + m.repo + "/" + m.thread;
+        bump(nodeOf(m.sender), th, "sent", i);
+        if (m.to_agent !== "all") bump(th, nodeOf(m.recipient), "addressed", i);
+      }
+    });
+    const live = new Set();
+    edges.forEach((e) => { live.add(e.a); live.add(e.b); });
+    const shown = all.filter((k) => !G.quiet || live.has(k));
+    // layout
+    const pos = new Map();
+    const W = 900;
+    let H = 520;
+    if (G.lens === "who") {
+      // a scope's own node (an address naming no instance) sits beside its instances
+      const order = shown.slice().sort((a, b) => rank(a) - rank(b) || scopeOf(a).localeCompare(scopeOf(b)) || a.localeCompare(b));
+      H = Math.max(520, 160 + order.length * 26);
+      const rx = W / 2 - 200, ry = H / 2 - (order.length > 8 ? 100 : 72), cx = W / 2, cy = H / 2;
+      order.forEach((k, i) => { const t = order.length === 1 ? -Math.PI / 2 : -Math.PI / 2 + (2 * Math.PI * i) / order.length; pos.set(k, { x: order.length === 1 ? cx : cx + rx * Math.cos(t), y: order.length === 1 ? cy : cy + ry * Math.sin(t), t, i }); });
+    } else {
+      const left = shown.filter((k) => k.startsWith("owner")).sort(), mid = shown.filter((k) => k.startsWith("thread:")), right = shown.filter((k) => !k.startsWith("owner") && !k.startsWith("thread:")).sort();
+      H = Math.max(360, 70 + Math.max(left.length, mid.length, right.length) * 68);
+      const col = (list, x) => list.forEach((k, i) => pos.set(k, { x, y: (H / (list.length + 1)) * (i + 1) }));
+      col(left, 210); col(mid, 450); col(right, 690);
+    }
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const defs = el("defs", {}, svg);
+    ["", "latest"].forEach((c) => { const mk = el("marker", { id: "ah" + c, viewBox: "0 0 10 10", refX: "8", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, defs); el("path", { d: "M0,0 L10,5 L0,10 z", class: "arrow " + c }, mk); });
+    // edges
+    const gE = el("g", {}, svg);
+    const half = (k) => (k.startsWith("thread:") ? 92 : NR + 2);
+    edges.forEach((e) => {
+      const pa = pos.get(e.a), pb = pos.get(e.b);
+      if (!pa || !pb) return;
+      const latest = e.last === upto.length - 1;
+      const cls = `edge ${e.kind === "bcast" ? "bcast" : ""} ${e.kind === "addressed" ? "addressed" : ""} ${latest ? "latest" : ""}`;
+      const w = (1.25 + Math.sqrt(e.n) * 1.25).toFixed(2);
+      let d;
+      if (G.lens === "who") {
+        const bend = edges.has(e.b + "|" + e.a) ? 22 : 0;
+        const dx = pb.x - pa.x, dy = pb.y - pa.y, l = Math.hypot(dx, dy) || 1;
+        const c = { x: (pa.x + pb.x) / 2 - dy / l * bend, y: (pa.y + pb.y) / 2 + dx / l * bend };
+        const s = trim(pa, c, NR + 2), t = trim(pb, c, NR + 6);
+        d = `M${s.x.toFixed(1)},${s.y.toFixed(1)} Q${c.x.toFixed(1)},${c.y.toFixed(1)} ${t.x.toFixed(1)},${t.y.toFixed(1)}`;
+      } else {
+        const ax = pa.x + (pb.x > pa.x ? half(e.a) : -half(e.a)), bx = pb.x + (pb.x > pa.x ? -half(e.b) : half(e.b));
+        const mx = (ax + bx) / 2;
+        d = `M${ax},${pa.y} C${mx},${pa.y} ${mx},${pb.y} ${bx},${pb.y}`;
+      }
+      const path = el("path", { d, class: cls, "stroke-width": w }, gE);
+      if (G.lens === "who") path.setAttribute("marker-end", `url(#ah${latest ? "latest" : ""})`);
+      el("title", {}, path).textContent = `${e.a.replace("thread:", "")} → ${e.b.replace("thread:", "")}: ${e.n} message${e.n === 1 ? "" : "s"}`;
+    });
+    // nodes
+    const gN = el("g", {}, svg);
+    const curNodes = new Set([nodeOf(cur.sender), "thread:" + cur.repo + "/" + cur.thread]);
+    shown.forEach((k) => {
+      const p = pos.get(k);
+      const st = lastStatus.get(k) || "";
+      const cls = `node ${st} ${isGroup(k) && !k.startsWith("thread:") ? "group" : ""} ${live.has(k) ? "" : "quiet"} ${curNodes.has(k) ? "current" : ""}`;
+      const g = el("g", { class: cls, transform: `translate(${p.x},${p.y})` }, gN);
+      if (k.startsWith("thread:")) {
+        el("rect", { x: -90, y: -16, width: 180, height: 32, rx: 4 }, g);
+        const name = k.slice(7), slash = name.indexOf("/"), repo = name.slice(0, slash), th = name.slice(slash + 1);
+        txt(g, 0, 4, th.length > 24 ? th.slice(0, 23) + "…" : th);
+        txt(g, -88, -21, repo, "sub", "start");
+        el("title", {}, g).textContent = name + (st ? " · last " + st : "");
+        return;
+      }
+      el("circle", { r: NR }, g);
+      txt(g, 0, 5, (k.startsWith("all") ? "*" : parse(k).harness.slice(0, 1).toUpperCase()), "mono1");
+      const [head, inst] = k.split("#");
+      const side = G.lens === "threads" ? (p.x > W / 2 ? 1 : -1) : Math.abs(Math.cos(p.t)) > 0.45 ? Math.sign(Math.cos(p.t)) : 0;
+      if (side) {
+        const ax = side * (NR + 8), an = side > 0 ? "start" : "end";
+        txt(g, ax, inst ? -1 : 4, head, "", an); if (inst) txt(g, ax, 13, "#" + inst, "sub", an);
+      } else {
+        // neighbours near the top and bottom both label vertically; stagger every other one
+        const below = Math.sin(p.t) > 0, stagger = shown.length > 8 && p.i % 2 ? (inst ? 28 : 15) : 0;
+        const y0 = below ? NR + 16 + stagger : -(NR + (inst ? 22 : 9) + stagger);
+        txt(g, 0, y0, head); if (inst) txt(g, 0, y0 + 13, "#" + inst, "sub");
+      }
+      // open unread at this point in the replay, per receipt scope; in instance view only on scope-level nodes
+      if (!k.startsWith("all") && (!G.inst || isGroup(k))) {
+        const n = unreadFor(scopeOf(k), upto, cur.ts).filter((m) => OPEN[m.status]).length;
+        if (n) { const b = el("g", { class: "badge", transform: `translate(${NR - 4},${-NR + 4})` }, g); el("circle", { r: 9 }, b); txt(b, 0, 4, String(n)); el("title", {}, b).textContent = `${n} open unread at this point`; }
+      }
+      el("title", {}, g).textContent = k + (st ? " · last sent " + st : "") + (live.has(k) ? "" : " · nothing yet at this point");
+    });
+    $("#g-legend").innerHTML = G.lens === "who"
+      ? `<span>→ direct, width grows with count</span><span>- - → to all@repo${G.expand ? ", fanned out to everyone known in the repo" : ""}</span>${G.inst ? "<span>dashed circle: an address naming no instance, which any instance of it may read</span>" : ""}<span>ring: status of the node's last sent message</span><span>badge: open REQUEST or BLOCKED not yet acked at this step</span><span>highlight: the current message</span>`
+      : `<span>solid: sent into the thread, width grows with count</span><span>dotted: a thread message addressed to someone by name</span><span>box outline: the thread's last status</span><span>badge: open REQUEST or BLOCKED not yet acked at this step</span>`;
+    const rec = D.receipts.filter((r) => r.message_id === cur.id);
+    $("#g-post").innerHTML = `<div class="chips"><span class="chip">#${cur.id}</span>${statusChip(cur)}<span class="chip sig-${sig(cur.sender)}">${esc(cur.sender)}</span><span class="chip">→ ${esc(cur.recipient)}</span><span class="chip">${esc(cur.repo)}/${esc(cur.thread)}</span>${rec.map((r) => `<span class="chip" title="receipt ${esc(r.ts)}">read by ${esc(r.reader)}</span>`).join("") || `<span class="chip" style="color:var(--muted)">no receipt</span>`}</div><pre class="env">${esc(envelope(cur))}</pre><div class="row-actions"><button class="chipbtn" data-goto="${cur.id}">open in messages</button></div>`;
+  }
+  $("#g-first").addEventListener("click", () => { play(false); G.step = 0; renderGraph(); });
+  $("#g-prev").addEventListener("click", () => { play(false); G.step--; renderGraph(); });
+  $("#g-next").addEventListener("click", () => { play(false); G.step++; renderGraph(); });
+  $("#g-last").addEventListener("click", () => { play(false); G.step = Infinity; renderGraph(); });
+  $("#g-play").addEventListener("click", () => play(!G.timer));
+  $("#g-range").addEventListener("input", (e) => { play(false); G.step = Number(e.target.value); renderGraph(); });
+  $("#g-speed").addEventListener("change", () => { if (G.timer) play(true); });
+  $("#g-lens").addEventListener("change", (e) => { G.lens = e.target.value; renderGraph(); });
+  $("#g-repo").addEventListener("change", (e) => { G.repo = e.target.value; G.step = Infinity; renderGraph(); });
+  $("#g-thread").addEventListener("change", (e) => { G.thread = e.target.value; G.step = Infinity; renderGraph(); });
+  $("#g-inst").addEventListener("change", (e) => { G.inst = e.target.checked; renderGraph(); });
+  $("#g-expand").addEventListener("change", (e) => { G.expand = e.target.checked; renderGraph(); });
+  $("#g-quiet").addEventListener("change", (e) => { G.quiet = e.target.checked; renderGraph(); });
+  document.addEventListener("keydown", (e) => {
+    if ($("#panel-graph").hidden || e.target.closest("select, input, textarea")) return;
+    if (e.key === "ArrowLeft") { play(false); G.step--; renderGraph(); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { play(false); G.step++; renderGraph(); e.preventDefault(); }
+    else if (e.key === " " && !e.target.closest("button")) { play(!G.timer); e.preventDefault(); }
+  });
+  renderGraph();
 })();
 </script>

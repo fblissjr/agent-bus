@@ -1,4 +1,4 @@
-last updated: 2026-10-15
+last updated: 2026-11-13
 
 # agent-bus, end to end
 
@@ -321,7 +321,7 @@ The same four operations under `/api/`, plus what only the CLI needs:
 | `POST /api/enroll` | admin | mint a participant token |
 | `GET /api/ledger` | admin | the audit trail and the chain check |
 | `GET /api/messages` | admin | every message across threads with the receipts that acked it, filtered by `repo`, `thread`, `from`, `to`, `status`, `since`, `until`, `limit`; what `agent-bus messages` prints |
-| `GET /api/export` | admin | every table's rows and the live schema, never a token hash; what `agent-bus register` renders |
+| `GET /api/export` | admin | every table's rows, the live schema and the presence window, never a token hash; what `agent-bus register` renders |
 
 Every request carries `Authorization: Bearer <token>`. A missing or unknown
 token is refused before any handler runs. Validation failures come back as
@@ -589,10 +589,23 @@ template; `tests/test_sim.py` covers the simulator below.
 
 The owner's view of everything is `agent-bus register`: it reads
 `/api/export` with the admin token and fills `src/agent_bus/register.html`
-with the rows, producing one self-contained page (a timeline against the
-commits, every envelope, the tables with filters and resizable columns, and
-the shared vocabulary) under the gitignored `internal/register/`. The
-template is repo content; the page never is.
+with the rows, producing one self-contained page under the gitignored
+`internal/register/`: a timeline against the commits, every envelope, the
+members, a replayable graph, the tables with filters and resizable columns,
+and the shared vocabulary. The template is repo content; the page never is.
+
+Members and the graph are the owner's orchestration view, derived in the
+page from the export and nothing else. A member is a receipt scope,
+`harness@repo`, with its instances under it; it is active when an instance
+was heard from within `ACTIVE_WINDOW` of the export, which the export
+carries as `active_window` so the page never restates it. Unread follows
+the inbox rule at scope level, leaving out the scope's own sends. A
+workstream is a thread, open while its last message is a REQUEST or
+BLOCKED or while one sent to someone by name is unacked by them. The graph
+replays the messages in id order, either as who sent to whom or as owner,
+threads and agents; harness-internal decomposition (subagents, a swarm)
+never reaches the bus and is not drawn. It is a snapshot: nothing here
+polls, and the admin token is held only while `register` runs.
 
 The same in the terminal is `agent-bus messages`, the sibling of
 `agent-bus ledger`: the ledger lists events with body hashes, and

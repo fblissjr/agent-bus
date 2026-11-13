@@ -19,7 +19,7 @@ import pytest
 import uvicorn
 
 from agent_bus.daemon import build_app
-from agent_bus.store import Store
+from agent_bus.store import ACTIVE_WINDOW, Store
 
 ADMIN = "admin-token-for-tests"
 
@@ -244,6 +244,7 @@ def test_export_is_admin_only_and_never_carries_token_hashes(bus):
     code, out = bus.call("GET", "/api/export", ADMIN)
     assert code == 200 and out["first_bad_seq"] is None
     assert set(out["schema"]) == {"messages", "receipts", "seen", "seats", "participants", "ledger"}
+    assert out["active_window"] == ACTIVE_WINDOW.total_seconds()  # the register marks members active by it
     assert out["messages"][0]["body"] == "exported" and out["messages"][0]["files"] == []
     assert out["participants"] and "token_hash" not in out["participants"][0]
     assert "token_hash" not in json.dumps(out)
@@ -259,7 +260,7 @@ def test_cli_register_renders_the_page_from_the_packaged_template(bus, tmp_path)
     assert "__DATA__" not in page and "on the page" in page and "agent-bus Register" in page
     start = page.index('<script id="data" type="application/json">') + len('<script id="data" type="application/json">')
     embedded = json.loads(page[start:page.index("</script>", start)].replace("<\\/", "</"))
-    assert len(embedded["messages"]) == 1 and "commits" in embedded
+    assert len(embedded["messages"]) == 1 and "commits" in embedded and embedded["active_window"] == ACTIVE_WINDOW.total_seconds()
     assert cli(bus, ["register"], tmp_path).returncode == 0
     assert list((tmp_path / "internal" / "register").glob("*-register.html"))
 

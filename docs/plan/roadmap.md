@@ -1,4 +1,4 @@
-last updated: 2026-10-15
+last updated: 2026-11-13
 
 # Roadmap
 
@@ -134,8 +134,10 @@ is still open.
   hook-test arms, a README section.
 - Owner view: shipped early, in 0.5.1, as `agent-bus register`, a page
   rendered by the CLI from the admin-only export into the gitignored
-  `internal/register/`, and in 0.5.6 as `agent-bus messages` in the
-  terminal. No server, no long-lived process holding the admin token.
+  `internal/register/`, in 0.5.6 as `agent-bus messages` in the terminal,
+  and in 0.5.14 with members, workstreams and a replayable message graph
+  on the register. No server, no long-lived process holding the admin
+  token; a live view would need one, and that is the owner's call.
 - Explicit thread membership (rooms): designed in
   `docs/design/groups.md`; any member can add a member, additions are
   ledger events, derived membership stays the default, and every read is

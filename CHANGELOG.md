@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.14
+
+- The register gains Members and Graph tabs, the owner's orchestration
+  view of a run. Members lists the workstreams, one per thread with the
+  open ones first and who each is waiting on, then a roster per
+  `harness@repo` with its instances, seats, last message and open unread.
+  Graph replays the messages in id order with a scrubber, play and the
+  current envelope below, as who sent to whom or as owner, threads and
+  agents, with toggles for instances, fanning out `all@` and hiding
+  quiet nodes. Everything is derived in the page from the export.
+- The export carries `active_window`, the store's `ACTIVE_WINDOW` in
+  seconds, so the page marks members active without restating it. The
+  daemon serves it after a redeploy; until then the page says the window
+  is missing and marks nobody active.
+
 ## 0.5.13
 
 - The commands the hooks print, Claude's ack line and the Antigravity
